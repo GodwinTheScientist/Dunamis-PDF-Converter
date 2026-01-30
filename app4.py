@@ -23,7 +23,6 @@ if not st.session_state.authenticated:
             st.error("Wrong password")
     st.stop()
 
-
 logo_url = "https://i.postimg.cc/sxSLVk2D/church-logo-cmyk-1-white.png"
 bg_image_url = "https://images.unsplash.com/photo-1530688957198-8570b1819eeb?q=80&w=2114&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
 
@@ -85,15 +84,18 @@ st.markdown(f"""
         margin: 0 auto !important;
         padding: 0 20px !important;
     }}
-    .stTabs > div > div {{
-        background: rgba(255,255,255,0.08) !important;
-        backdrop-filter: blur(16px) !important;
-        border-radius: 16px !important;
-        border: 1px solid rgba(255,255,255,0.12) !important;
-        box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important;
-        padding: 25px 20px !important;
-        margin: 15px auto !important;
+
+    /* Only apply glass effect if the tab has visible content */
+    .stTabs > div > div:has(> *) {{
+    background: rgba(255,255,255,0.08) !important;
+    backdrop-filter: blur(16px) !important;
+    border-radius: 16px !important;
+    border: 1px solid rgba(255,255,255,0.12) !important;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important;
+    padding: 25px 20px !important;
+    margin: 15px auto !important;
     }}
+
     /* Big centered Generate button - no scroll needed */
     .generate-container {{
         text-align: center;
@@ -115,6 +117,8 @@ st.markdown(f"""
         transform: translateY(-4px) !important;
         box-shadow: 0 16px 40px rgba(255,215,0,0.7) !important;
     }}
+
+    
     /* Compact metric cards */
     .metric-card {{
         background: rgba(255,255,255,0.08) !important;
