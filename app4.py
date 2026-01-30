@@ -1,3 +1,15 @@
+
+#Begin
+import streamlit as st
+from pptx import Presentation
+from pptx.util import Inches, Pt
+from pptx.enum.text import PP_ALIGN
+from pptx.dml.color import RGBColor
+import fitz  # PyMuPDF
+import re
+from io import BytesIO
+
+# ── PASSWORD PROTECTION ─────────────────────────────────────────────────────
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
@@ -11,16 +23,6 @@ if not st.session_state.authenticated:
             st.error("Wrong password")
     st.stop()
 
-#Begin
-
-import streamlit as st
-from pptx import Presentation
-from pptx.util import Inches, Pt
-from pptx.enum.text import PP_ALIGN
-from pptx.dml.color import RGBColor
-import fitz  # PyMuPDF
-import re
-from io import BytesIO
 
 logo_url = "https://i.postimg.cc/sxSLVk2D/church-logo-cmyk-1-white.png"
 bg_image_url = "https://images.unsplash.com/photo-1530688957198-8570b1819eeb?q=80&w=2114&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
