@@ -21,7 +21,7 @@ if not st.session_state.authenticated:
             st.rerun()
         else:
             st.error("Wrong password")
-    st.stop()
+    st.rerun()
 
 
 logo_url = "https://i.postimg.cc/sxSLVk2D/church-logo-cmyk-1-white.png"
