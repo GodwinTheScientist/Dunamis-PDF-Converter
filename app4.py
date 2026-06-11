@@ -112,23 +112,23 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# Initialize counter states cleanly
-if 'parsed_prayers_count' not in st.session_state:
-    st.session_state.parsed_prayers_count = "-"
-if 'parsed_sessions_count' not in st.session_state:
-    st.session_state.parsed_sessions_count = "-"
+# ── Dynamic Session State Syncing ──────────────────────────────────────────
+if 'total_prayers' not in st.session_state:
+    st.session_state.total_prayers = "-"
+if 'total_sessions' not in st.session_state:
+    st.session_state.total_sessions = "-"
 
-# ── Metrics Row ─────────────────────────────────────────────────────────────
+# Metrics Interface Display
 cols = st.columns(3)
 with cols[0]:
     num_pdfs = len(st.session_state.get('uploaded_files', []))
     st.markdown(f"<div class='metric-card'><h3>{num_pdfs}</h3><p>Total PDFs</p></div>", unsafe_allow_html=True)
 with cols[1]:
-    st.markdown(f"<div class='metric-card'><h3>{st.session_state.parsed_prayers_count}</h3><p>Total Prayers</p></div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='metric-card'><h3>{st.session_state.total_prayers}</h3><p>Prayers</p></div>", unsafe_allow_html=True)
 with cols[2]:
-    st.markdown(f"<div class='metric-card'><h3>{st.session_state.parsed_sessions_count}</h3><p>Total Sessions</p></div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='metric-card'><h3>{st.session_state.total_sessions}</h3><p>Sessions</p></div>", unsafe_allow_html=True)
 
-# ── Configuration Tabs ──────────────────────────────────────────────────────
+# ── Configuration Layout ────────────────────────────────────────────────────
 tab1, tab2 = st.tabs(["📁 Upload", "🎨 Customise"])
 
 with tab1:
@@ -137,17 +137,17 @@ with tab1:
         st.session_state.uploaded_files = uploaded_files
         st.success(f"Uploaded {len(uploaded_files)} PDF(s)")
         
-        # Calculate dynamic metrics on document submission
-        total_prayers_found = 0
+        # Immediate counts pre-scan logic
+        calculated_prayers = 0
         for f in uploaded_files:
             try:
-                d = fitz.open(stream=f.getvalue(), filetype="pdf")
-                t = "".join(p.get_text("text") for p in d)
-                total_prayers_found += len(re.findall(r"^\d+\.", t, re.M))
+                pdf_doc = fitz.open(stream=f.getvalue(), filetype="pdf")
+                full_raw = "".join(page.get_text("text") for page in pdf_doc)
+                calculated_prayers += len(re.findall(r"^\s*\bPrayer Point\b\s*\d+|^\d+\.", full_raw, re.M | re.I))
             except:
                 pass
-        st.session_state.parsed_prayers_count = total_prayers_found if total_prayers_found > 0 else "-"
-        st.session_state.parsed_sessions_count = len(uploaded_files)
+        st.session_state.total_prayers = calculated_prayers if calculated_prayers > 0 else "Detected"
+        st.session_state.total_sessions = len(uploaded_files)
 
 with tab2:
     col_left, col_right = st.columns([1, 1])
@@ -167,20 +167,20 @@ with tab2:
         body_color = st.color_picker("Body", "#FFFFFF")
 
     with col_right:
-        header_size = st.slider("Header size", 40, 90, 64)
-        body_size = st.slider("Body size", 32, 70, 46)
-        bible_size = st.slider("Bible size", 32, 70, 42)
+        header_size = st.slider("Header size", 40, 90, 68)
+        body_size = st.slider("Body size", 30, 80, 50)
+        bible_size = st.slider("Bible size", 30, 70, 44)
 
         text_case = st.selectbox("Text case", ["Original", "UPPERCASE", "lowercase", "Title Case"])
         include_bible = st.checkbox("Include Bible slide", value=True)
 
-# ── Generation Engine ───────────────────────────────────────────────────────
+# ── PowerPoint Generation Engine ────────────────────────────────────────────
 st.markdown('<div class="generate-container">', unsafe_allow_html=True)
 if st.button("🚀 Generate & Download PPTX", key="generate"):
     if 'uploaded_files' not in st.session_state or not st.session_state.uploaded_files:
         st.error("Upload PDFs first.")
     else:
-        with st.spinner("Generating Presentation Layouts..."):
+        with st.spinner("Compiling structural templates..."):
             prs = Presentation()
             prs.slide_width = Inches(13.333)
             prs.slide_height = Inches(7.5)
@@ -190,42 +190,20 @@ if st.button("🚀 Generate & Download PPTX", key="generate"):
                 fill.solid()
                 fill.fore_color.rgb = RGBColor(*bg_rgb)
 
-            def clean_system_artifacts(txt):
-                if not txt:
-                    return ""
-                # Strip variable spacing page markers: "P a g e  1 | 2", "Page 2", etc.
-                txt = re.sub(r"P\s*a\s*g\s*e\s*\d+\s*\|\s*\d+", "", txt, flags=re.I)
-                txt = re.sub(r"Page\s*\d+", "", txt, flags=re.I)
-                # Eliminate standard repeated running document footers/headers
-                txt = re.sub(r"Dunamis Bible Church", "", txt, flags=re.I)
-                return txt.strip()
-
-            def get_adaptive_font_size(text, base_size):
-                length = len(text)
-                # Scaled font logic to fit within widescreen bounding parameters
-                if length > 300:
-                    return max(24, int(base_size * 0.55))
-                elif length > 180:
-                    return max(28, int(base_size * 0.72))
-                elif length > 120:
-                    return max(34, int(base_size * 0.85))
-                return base_size
-
             def add_centered(slide, l, t, w, h, text, size, color_hex, bold=False):
                 tb = slide.shapes.add_textbox(Inches(l), Inches(t), Inches(w), Inches(h))
                 tf = tb.text_frame
                 tf.word_wrap = True
                 tf.clear()
                 
-                # Zero out internal margins so text has extra vertical breathing room
-                tf.margin_left = Inches(0.1)
-                tf.margin_right = Inches(0.1)
-                tf.margin_top = Inches(0.1)
-                tf.margin_bottom = Inches(0.1)
+                # Expand line safe-zones to eliminate bottom edge clipping entirely
+                tf.margin_top = Inches(0)
+                tf.margin_bottom = Inches(0)
                 
                 p = tf.paragraphs[0]
                 p.alignment = PP_ALIGN.CENTER
                 
+                # FIX: Initialize via add_run safely to completely clear overlapping
                 run = p.add_run()
                 run.text = text or ""
                 run.font.size = Pt(size)
@@ -240,25 +218,25 @@ if st.button("🚀 Generate & Download PPTX", key="generate"):
 
                 lines = [l.strip() for l in text.split("\n") if l.strip()]
 
-                title = file.name.replace(".pdf", "")
+                title = file.name.replace(".pdf", "").replace("_", " ")
                 if "FRIDAY" in text.upper():
                     title = "Friday Prayer Session"
                 elif "SATURDAY" in text.upper():
                     title = "Saturday Prayer Session"
 
-                # Intermission slide between multiple uploaded files
+                # Structural Intermission slides
                 if idx > 0:
                     slide = prs.slides.add_slide(prs.slide_layouts[6])
                     set_bg(slide)
-                    add_centered(slide, 0.8, 2.5, 11.7, 2.5, f"--- Next Session ---\n{title}", 54, header_color, True)
+                    add_centered(slide, 0.8, 2.8, 11.7, 2.0, f"--- Next Session ---\n{title}", 56, header_color, True)
 
-                # Welcome Cover Slide
+                # Welcome Document Slide
                 slide = prs.slides.add_slide(prs.slide_layouts[6])
                 set_bg(slide)
-                add_centered(slide, 0.8, 1.2, 11.7, 1.8, f"Dunamis Bible Church", 56, header_color, True)
-                add_centered(slide, 1.2, 4.5, 11.0, 1.5, "PRAYER POINTS", 48, "#CCCCCC")
+                add_centered(slide, 0.8, 0.8, 11.7, 1.8, f"Dunamis Bible Church", 56, header_color, True)
+                add_centered(slide, 1.2, 5.2, 11.0, 1.2, "PRAYER POINTS", 50, "#CCCCCC")
 
-                # Parse Scripture metadata details
+                # Parse Scripture Passage blocks
                 bible_ref, bible_text = "", ""
                 ref = re.search(r"(([1-3]?\s?[A-Za-z]+)[\s\S]*?\(KJV\))", text, re.I)
                 if ref:
@@ -266,43 +244,53 @@ if st.button("🚀 Generate & Download PPTX", key="generate"):
                     start = text.find(bible_ref) + len(bible_ref)
                     end = text.find("1.", start)
                     if end > start:
-                        raw_bible_text = text[start:end]
-                        bible_text = clean_system_artifacts(raw_bible_text)
+                        raw_bible = text[start:end].strip()
+                        # Dynamic pattern to strip footers out of Scripture bodies
+                        raw_bible = re.sub(r"Dunamis Bible Church.*|P\s*a\s*g\s*e.*|\(AKA.* Charity.*", "", raw_bible, flags=re.I)
+                        bible_text = " ".join([b.strip() for b in raw_bible.split("\n") if b.strip()])
 
                 if include_bible and bible_ref and bible_text:
                     slide = prs.slides.add_slide(prs.slide_layouts[6])
                     set_bg(slide)
+                    add_centered(slide, 0.8, 0.4, 11.7, 1.2, bible_ref, header_size, header_color, True)
                     
-                    # Prevent long book name reference overflows
-                    ref_size = header_size if len(bible_ref) < 40 else header_size - 12
-                    add_centered(slide, 0.8, 0.5, 11.7, 1.2, bible_ref, ref_size, header_color, True)
-                    
-                    # Dynamically compute safety size for scripture bodies
-                    computed_bible_size = get_adaptive_font_size(bible_text, bible_size)
-                    add_centered(slide, 0.8, 2.0, 11.7, 5.0, bible_text, computed_bible_size, body_color)
+                    # Responsive font scale factor for large Scripture passages
+                    current_b_size = bible_size
+                    if len(bible_text) > 340:
+                        current_b_size = max(24, bible_size - 14)
+                    elif len(bible_text) > 180:
+                        current_b_size = max(28, bible_size - 6)
+                        
+                    add_centered(slide, 0.8, 1.8, 11.7, 5.2, bible_text, current_b_size, body_color)
 
-                # Parse and group Prayer Points cleanly
+                # Parse and refine single lines inside target text arrays
                 prayers = []
                 current = ""
                 for line in lines:
-                    if re.match(r"^\d+\.", line):
+                    # Clean system artifacts instantly before evaluation
+                    if any(marker in line.lower() for marker in ["charity no", "dunamis centre", "northmoor", "manchester m12"]):
+                        continue
+                    if re.match(r"^P\s*a\s*g\s*e\s*\d+", line, re.I) or line.strip() == "Dunamis Bible Church":
+                        continue
+                        
+                    if re.match(r"^\d+\.", line) or re.match(r"^Prayer Point\s*\d+", line, re.I):
                         if current:
                             prayers.append(current.strip())
                         current = line
                     elif current:
-                        # Prevent appending running headers/footers into text body streams
-                        cleaned_line = clean_system_artifacts(line)
-                        if cleaned_line:
-                            current += " " + cleaned_line
+                        current += " " + line
                 if current:
                     prayers.append(current.strip())
 
-                # Generate clean scaled slides for each parsed point
+                # Generate layout frames per prayer element
                 for prayer in prayers:
-                    m = re.match(r"^(\d+)\.\s*(.*)", prayer, re.DOTALL)
+                    # Capture either standard '1.' or 'Prayer Point 1' formats safely
+                    m = re.match(r"^(?:Prayer Point\s*)?(\d+)[\.\s]*(.*)", prayer, re.DOTALL | re.I)
                     if m:
                         num, text_content = m.groups()
-                        text_content = clean_system_artifacts(text_content)
+                        
+                        # Strip remaining footer strings from content blocks completely
+                        text_content = re.sub(r"Dunamis Bible Church.*|P\s*a\s*g\s*e.*|\(AKA.* Charity.*", "", text_content, flags=re.I).strip()
 
                         if text_case == "UPPERCASE":
                             text_content = text_content.upper()
@@ -313,21 +301,23 @@ if st.button("🚀 Generate & Download PPTX", key="generate"):
 
                         slide = prs.slides.add_slide(prs.slide_layouts[6])
                         set_bg(slide)
+                        add_centered(slide, 0.8, 0.5, 11.7, 1.4, f"Prayer Point {num}", header_size, header_color, True)
                         
-                        # Primary Title Header Block
-                        add_centered(slide, 0.8, 0.6, 11.7, 1.4, f"Prayer Point {num}", header_size, header_color, True)
-                        
-                        # Calculate adaptive font size for the prayer content body
-                        computed_body_size = get_adaptive_font_size(text_content, body_size)
-                        
-                        # Position body with expanded vertical allotment (y=2.2, h=4.8) to maximize visual safe areas
-                        add_centered(slide, 0.8, 2.2, 11.7, 4.8, text_content, computed_body_size, body_color)
+                        # Responsive downscaling rule based on string density to prevent boundary clipping
+                        current_body_size = body_size
+                        if len(text_content) > 300:
+                            current_body_size = max(24, body_size - 16)
+                        elif len(text_content) > 150:
+                            current_body_size = max(28, body_size - 8)
+
+                        # Draw the box using enhanced vertical breathing room parameters (y=2.0, h=5.0)
+                        add_centered(slide, 0.8, 2.0, 11.7, 5.0, text_content, current_body_size, body_color)
 
             bio = BytesIO()
             prs.save(bio)
             bio.seek(0)
 
-            st.success("✅ Presentation layouts generated successfully!")
+            st.success("✅ Layout Generation Complete!")
             st.download_button(
                 label="⬇ Download PPTX",
                 data=bio,
