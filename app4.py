@@ -1,6 +1,3 @@
-
-#Begin
-
 import streamlit as st
 from pptx import Presentation
 from pptx.util import Inches, Pt
@@ -206,9 +203,10 @@ if st.button("🚀 Generate & Download PPTX", key="generate"):
                 tf.word_wrap = True
                 tf.clear()
                 p = tf.add_paragraph()
-                p.text = text or ""
                 p.alignment = PP_ALIGN.CENTER
-                run = p.runs[0]
+                # Fixed: Use add_run() instead of referencing non-existent runs[0]
+                run = p.add_run()
+                run.text = text or ""
                 run.font.size = Pt(size)
                 r, g, b = tuple(int(color_hex[i:i+2], 16) for i in (1, 3, 5))
                 run.font.color.rgb = RGBColor(r, g, b)
@@ -268,18 +266,18 @@ if st.button("🚀 Generate & Download PPTX", key="generate"):
                 for prayer in prayers:
                     m = re.match(r"^(\d+)\.\s*(.*)", prayer, re.DOTALL)
                     if m:
-                        num, text = m.groups()
+                        num, text_content = m.groups()
                         if text_case == "UPPERCASE":
-                            text = text.upper()
+                            text_content = text_content.upper()
                         elif text_case == "lowercase":
-                            text = text.lower()
+                            text_content = text_content.lower()
                         elif text_case == "Title Case":
-                            text = text.title()
+                            text_content = text_content.title()
 
                         slide = prs.slides.add_slide(prs.slide_layouts[6])
                         set_bg(slide)
                         add_centered(slide, 0.8, 0.6, 11.7, 1.6, f"Prayer Point {num}", header_size, header_color, True)
-                        add_centered(slide, 1.0, 2.4, 11.3, 4.5, text.strip(), body_size, body_color)
+                        add_centered(slide, 1.0, 2.4, 11.3, 4.5, text_content.strip(), body_size, body_color)
 
             bio = BytesIO()
             prs.save(bio)
