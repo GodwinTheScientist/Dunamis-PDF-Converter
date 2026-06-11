@@ -1,3 +1,6 @@
+
+#Begin
+
 import streamlit as st
 from pptx import Presentation
 from pptx.util import Inches, Pt
@@ -10,14 +13,6 @@ from io import BytesIO
 logo_url = "https://i.postimg.cc/sxSLVk2D/church-logo-cmyk-1-white.png"
 bg_image_url = "https://images.unsplash.com/photo-1530688957198-8570b1819eeb?q=80&w=2114&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
 
-# Initialize session state tracking
-if 'uploaded_files' not in st.session_state:
-    st.session_state.uploaded_files = []
-if 'total_prayers' not in st.session_state:
-    st.session_state.total_prayers = 0
-if 'total_sessions' not in st.session_state:
-    st.session_state.total_sessions = 0
-
 st.markdown(f"""
     <style>
     .stApp {{
@@ -29,8 +24,8 @@ st.markdown(f"""
     }}
     .header-box {{
         text-align: center;
-        padding: 60px 0 30px 0;
-        min-height: 180px;
+        padding: 90px 0 40px 0;               /* base padding */
+        min-height: 180px;                     /* ensures space even on small screens */
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -53,6 +48,7 @@ st.markdown(f"""
         font-size: 1.1rem;
         margin: 8px 0 0 0;
     }}
+    /* Centered compact tabs */
     [data-testid="stTabList"] {{
         display: flex !important;
         justify-content: center !important;
@@ -74,24 +70,48 @@ st.markdown(f"""
         color: #FFD700 !important;
         border-radius: 8px !important;
     }}
+    /* Compact glass panels */
     .block-container {{
         max-width: 900px !important;
         margin: 0 auto !important;
         padding: 0 20px !important;
     }}
+
+    /* Only apply glass effect if the tab has visible content */
     .stTabs > div > div:has(> *) {{
-        background: rgba(255,255,255,0.08) !important;
-        backdrop-filter: blur(16px) !important;
-        border-radius: 16px !important;
-        border: 1px solid rgba(255,255,255,0.12) !important;
-        box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important;
-        padding: 25px 20px !important;
-        margin: 15px auto !important;
+    background: rgba(255,255,255,0.08) !important;
+    backdrop-filter: blur(16px) !important;
+    border-radius: 16px !important;
+    border: 1px solid rgba(255,255,255,0.12) !important;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important;
+    padding: 25px 20px !important;
+    margin: 15px auto !important;
     }}
+
+    /* Big centered Generate button - no scroll needed */
     .generate-container {{
         text-align: center;
-        margin: 30px 0;
+        margin: 40px 0 40px 0;
     }}
+    .generate-btn {{
+        width: 360px !important;
+        height: 64px !important;
+        font-size: 1.5rem !important;
+        font-weight: bold !important;
+        background: linear-gradient(90deg, #FFD700, #FFEA00) !important;
+        color: #001F3F !important;
+        border: none !important;
+        border-radius: 16px !important;
+        box-shadow: 0 10px 28px rgba(255,215,0,0.5) !important;
+        transition: all 0.3s !important;
+    }}
+    .generate-btn:hover {{
+        transform: translateY(-4px) !important;
+        box-shadow: 0 16px 40px rgba(255,215,0,0.7) !important;
+    }}
+
+    
+    /* Compact metric cards */
     .metric-card {{
         background: rgba(255,255,255,0.08) !important;
         backdrop-filter: blur(16px) !important;
@@ -116,46 +136,28 @@ st.markdown(f"""
     <div class="header-box">
         <img src="{logo_url}" class="mini-logo">
         <h1 class="main-title">Dunamis Prayer Converter</h1>
-        <p class="subtitle">Universal PDF to PPTX Dashboard</p>
+        <p class="subtitle">PDF to PPTX Dashboard</p>
     </div>
 """, unsafe_allow_html=True)
 
-# ── Dynamic Metric Panels ───────────────────────────────────────────────────
+# ── Compact Metrics ─────────────────────────────────────────────────────────
 cols = st.columns(3)
 with cols[0]:
-    num_pdfs = len(st.session_state.uploaded_files)
+    num_pdfs = len(st.session_state.get('uploaded_files', []))
     st.markdown(f"<div class='metric-card'><h3>{num_pdfs}</h3><p>Total PDFs</p></div>", unsafe_allow_html=True)
 with cols[1]:
-    st.markdown(f"<div class='metric-card'><h3>{st.session_state.total_prayers}</h3><p>Content Blocks</p></div>", unsafe_allow_html=True)
+    st.markdown("<div class='metric-card'><h3>-</h3><p>Prayers</p></div>", unsafe_allow_html=True)
 with cols[2]:
-    st.markdown(f"<div class='metric-card'><h3>{st.session_state.total_sessions}</h3><p>Total Files</p></div>", unsafe_allow_html=True)
+    st.markdown("<div class='metric-card'><h3>-</h3><p>Sessions</p></div>", unsafe_allow_html=True)
 
-# ── Customizer & Management Tabs ───────────────────────────────────────────
+# ── Two compact centered tabs ───────────────────────────────────────────────
 tab1, tab2 = st.tabs(["📁 Upload", "🎨 Customise"])
 
 with tab1:
-    uploaded_files = st.file_uploader("Upload PDFs (Template or General)", type=["pdf"], accept_multiple_files=True)
+    uploaded_files = st.file_uploader("Upload PDFs", type=["pdf"], accept_multiple_files=True)
     if uploaded_files:
         st.session_state.uploaded_files = uploaded_files
-        
-        # Calculate metrics directly on the fly without forcing an aggressive st.rerun()
-        temp_blocks = 0
-        for file in uploaded_files:
-            try:
-                doc = fitz.open(stream=file.getvalue(), filetype="pdf")
-                text = "".join(page.get_text("text") for page in doc)
-                lines = [l.strip() for l in text.split("\n") if l.strip()]
-                
-                if any(re.match(r"^\d+\.", l) for l in lines):
-                    temp_blocks += sum(1 for l in lines if re.match(r"^\d+\.", l))
-                else:
-                    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-                    temp_blocks += max(1, len(paragraphs) - 1)
-            except Exception:
-                pass
-        st.session_state.total_prayers = temp_blocks
-        st.session_state.total_sessions = len(uploaded_files)
-        st.rerun()
+        st.success(f"Uploaded {len(uploaded_files)} PDF(s)")
 
 with tab2:
     col_left, col_right = st.columns([1, 1])
@@ -171,29 +173,24 @@ with tab2:
             bg_hex = st.color_picker("Custom RGB", "#0A143C")
             bg_rgb = tuple(int(bg_hex[i:i+2], 16) for i in (1, 3, 5))
 
-        header_color = st.color_picker("Header Color", "#FFD700")
-        body_color = st.color_picker("Body Text Color", "#FFFFFF")
+        header_color = st.color_picker("Header", "#FFD700")
+        body_color = st.color_picker("Body", "#FFFFFF")
 
     with col_right:
-        header_size = st.slider("Header text size", 30, 100, 60)
-        body_size = st.slider("Body text size", 24, 80, 44)
-        bible_size = st.slider("Scripture text size", 24, 70, 40)
+        header_size = st.slider("Header size", 50, 100, 72)
+        body_size = st.slider("Body size", 40, 80, 54)
+        bible_size = st.slider("Bible size", 40, 70, 50)
 
-        text_case = st.selectbox("Text casing adjustment", ["Original", "UPPERCASE", "lowercase", "Title Case"])
-        include_bible = st.checkbox("Look for & include Bible slides", value=True)
+        text_case = st.selectbox("Text case", ["Original", "UPPERCASE", "lowercase", "Title Case"])
+        include_bible = st.checkbox("Include Bible slide", value=True)
 
-# ── Processing & Generation Engine ──────────────────────────────────────────
+# ── Centered Generate Button (no scroll needed) ─────────────────────────────
 st.markdown('<div class="generate-container">', unsafe_allow_html=True)
-
-if st.button("🚀 Generate & Download PPTX", key="generate", use_container_width=True):
+if st.button("🚀 Generate & Download PPTX", key="generate"):
     if 'uploaded_files' not in st.session_state or not st.session_state.uploaded_files:
-        st.error("Please upload one or more PDF files before trying to generate presentation files.")
+        st.error("Upload PDFs first.")
     else:
-        # Create a container to give real-time status updates right on the UI
-        status_box = st.empty()
-        status_box.info("Processing files and applying adaptive layout logic...")
-        
-        try:
+        with st.spinner("Generating..."):
             prs = Presentation()
             prs.slide_width = Inches(13.333)
             prs.slide_height = Inches(7.5)
@@ -203,15 +200,6 @@ if st.button("🚀 Generate & Download PPTX", key="generate", use_container_widt
                 fill.solid()
                 fill.fore_color.rgb = RGBColor(*bg_rgb)
 
-            def apply_casing(txt):
-                if text_case == "UPPERCASE":
-                    return txt.upper()
-                elif text_case == "lowercase":
-                    return txt.lower()
-                elif text_case == "Title Case":
-                    return txt.title()
-                return txt
-
             def add_centered(slide, l, t, w, h, text, size, color_hex, bold=False):
                 tb = slide.shapes.add_textbox(Inches(l), Inches(t), Inches(w), Inches(h))
                 tf = tb.text_frame
@@ -220,125 +208,90 @@ if st.button("🚀 Generate & Download PPTX", key="generate", use_container_widt
                 p = tf.add_paragraph()
                 p.text = text or ""
                 p.alignment = PP_ALIGN.CENTER
-                if p.runs:
-                    run = p.runs[0]
-                    run.font.size = Pt(size)
-                    r, g, b = tuple(int(color_hex[i:i+2], 16) for i in (1, 3, 5))
-                    run.font.color.rgb = RGBColor(r, g, b)
-                    run.font.bold = bold
+                run = p.runs[0]
+                run.font.size = Pt(size)
+                r, g, b = tuple(int(color_hex[i:i+2], 16) for i in (1, 3, 5))
+                run.font.color.rgb = RGBColor(r, g, b)
+                run.font.bold = bold
 
             for idx, file in enumerate(st.session_state.uploaded_files):
                 doc = fitz.open(stream=file.getvalue(), filetype="pdf")
-                raw_text = "".join(page.get_text("text") for page in doc)
-                lines = [l.strip() for l in raw_text.split("\n") if l.strip()]
-                
-                if not lines:
-                    continue
+                text = "".join(page.get_text("text") for page in doc)
 
-                # Auto-detect if it's a template or a normal document
-                is_template = any(re.match(r"^\d+\.", l) for l in lines)
-                
-                doc_title = file.name.replace(".pdf", "").replace("_", " ")
-                if "FRIDAY" in raw_text.upper():
-                    doc_title = "Friday Prayer Session"
-                elif "SATURDAY" in raw_text.upper():
-                    doc_title = "Saturday Prayer Session"
-                elif not is_template and len(lines) > 0:
-                    if len(lines[0]) < 60:
-                        doc_title = lines[0]
+                lines = [l.strip() for l in text.split("\n") if l.strip()]
 
-                # Intermission Slide
+                title = file.name.replace(".pdf", "")
+                if "FRIDAY" in text.upper():
+                    title = "Friday Prayer Session"
+                elif "SATURDAY" in text.upper():
+                    title = "Saturday Prayer Session"
+
+                abbr = re.search(r"(IJN=[\s\S]*?ITNJCN=[\s\S]*?Nazareth)", text, re.I)
+                abbr_text = abbr.group(0).strip().replace("\n", " • ") if abbr else ""
+
+                bible_ref, bible_text = "", ""
+                ref = re.search(r"((Genesis|Hebrews)[\s\S]*?\(KJV\))", text, re.I)
+                if ref:
+                    bible_ref = ref.group(1).strip()
+                    start = text.find(bible_ref) + len(bible_ref)
+                    end = text.find("1.", start)
+                    bible_text = text[start:end].strip() if end > start else ""
+
+                prayers = []
+                current = ""
+                for line in lines:
+                    if re.match(r"^\d+\.", line):
+                        if current:
+                            prayers.append(current.strip())
+                        current = line
+                    elif current and not line.startswith(("Page", "Dunamis Bible Church")):
+                        current += " " + line
+                if current:
+                    prayers.append(current.strip())
+
                 if idx > 0:
                     slide = prs.slides.add_slide(prs.slide_layouts[6])
                     set_bg(slide)
-                    add_centered(slide, 0.8, 3.0, 11.7, 2.0, f"--- Next Section ---\n{doc_title}", 48, header_color, True)
+                    add_centered(slide, 0.8, 3.0, 11.7, 2.0, f"--- Next Session ---\n{title}", 60, header_color, True)
 
-                # Welcome Cover Slide
                 slide = prs.slides.add_slide(prs.slide_layouts[6])
                 set_bg(slide)
-                add_centered(slide, 0.8, 2.2, 11.7, 1.8, "Dunamis Bible Church" if is_template else "Presentation Deck", 52, header_color, True)
-                add_centered(slide, 1.2, 4.2, 11.0, 1.5, doc_title.upper(), 40, "#CCCCCC", False)
+                add_centered(slide, 0.8, 0.5, 11.7, 1.8, f"Dunamis Bible Church", 56, header_color, True)
+                add_centered(slide, 1.2, 5.5, 11.0, 1.0, "PRAYER POINTS", 50, "#CCCCCC")
 
-                if is_template:
-                    # ── TEMPLATE PROCESSING LOGIC ──
-                    bible_ref, bible_text = "", ""
-                    ref = re.search(r"(([Genesis|Exodus|Leviticus|Numbers|Deuteronomy|Joshua|Judges|Ruth|Samuel|Kings|Chronicles|Ezra|Nehemiah|Esther|Job|Psalms|Proverbs|Ecclesiastes|Song|Isaiah|Jeremiah|Lamentations|Ezekiel|Daniel|Hosea|Joel|Amos|Obadiah|Jonah|Micah|Nahum|Habakkuk|Zephaniah|Haggai|Zechariah|Malachi|Matthew|Mark|Luke|John|Acts|Romans|Corinthians|Galatians|Ephesians|Philippians|Colossians|Thessalonians|Timothy|Titus|Philemon|Hebrews|James|Peter|John|Jude|Revelation][\w\s]+)\s\d+:\d+.*\(KJV\))", raw_text, re.I)
-                    if ref:
-                        bible_ref = ref.group(1).strip()
-                        start = raw_text.find(bible_ref) + len(bible_ref)
-                        end = raw_text.find("1.", start)
-                        if end > start:
-                            raw_bible_text = raw_text[start:end].strip()
-                            bible_text = re.sub(r"(Dunamis Bible Church|Page\s+\d+)", "", raw_bible_text, flags=re.I).strip()
+                if include_bible and bible_ref:
+                    slide = prs.slides.add_slide(prs.slide_layouts[6])
+                    set_bg(slide)
+                    add_centered(slide, 0.8, 0.8, 11.7, 1.4, bible_ref, header_size + 4, header_color, True)
+                    add_centered(slide, 1.0, 2.4, 11.3, 4.6, bible_text, bible_size, body_color)
 
-                    if include_bible and bible_ref and bible_text:
+                for prayer in prayers:
+                    m = re.match(r"^(\d+)\.\s*(.*)", prayer, re.DOTALL)
+                    if m:
+                        num, text = m.groups()
+                        if text_case == "UPPERCASE":
+                            text = text.upper()
+                        elif text_case == "lowercase":
+                            text = text.lower()
+                        elif text_case == "Title Case":
+                            text = text.title()
+
                         slide = prs.slides.add_slide(prs.slide_layouts[6])
                         set_bg(slide)
-                        add_centered(slide, 0.8, 0.8, 11.7, 1.2, bible_ref, header_size, header_color, True)
-                        add_centered(slide, 1.0, 2.2, 11.3, 4.8, bible_text, bible_size, body_color)
+                        add_centered(slide, 0.8, 0.6, 11.7, 1.6, f"Prayer Point {num}", header_size, header_color, True)
+                        add_centered(slide, 1.0, 2.4, 11.3, 4.5, text.strip(), body_size, body_color)
 
-                    items = []
-                    current = ""
-                    for line in lines:
-                        if re.match(r"^\d+\.", line):
-                            if current: items.append(current.strip())
-                            current = line
-                        elif current:
-                            if not any(x in line.lower() for x in ["page ", "dunamis bible church", "prayer points"]):
-                                current += " " + line
-                    if current: items.append(current.strip())
-
-                    for item in items:
-                        m = re.match(r"^(\d+)\.\s*(.*)", item, re.DOTALL)
-                        if m:
-                            num, p_text = m.groups()
-                            slide = prs.slides.add_slide(prs.slide_layouts[6])
-                            set_bg(slide)
-                            add_centered(slide, 0.8, 0.6, 11.7, 1.4, f"Point {num}", header_size, header_color, True)
-                            add_centered(slide, 1.0, 2.2, 11.3, 4.8, apply_casing(p_text.strip()), body_size, body_color)
-                else:
-                    # ── GENERIC / NORMAL PDF PROCESSING LOGIC ──
-                    paragraphs = [p.strip() for p in raw_text.split("\n\n") if p.strip()]
-                    
-                    # Safe fallback if double-newlines don't exist
-                    if len(paragraphs) <= 1:
-                        paragraphs = []
-                        current_chunk = []
-                        start_idx = 1 if len(lines[0]) < 60 else 0
-                        for line in lines[start_idx:]:
-                            current_chunk.append(line)
-                            if len(current_chunk) >= 3 or len(" ".join(current_chunk)) > 250:
-                                paragraphs.append(" ".join(current_chunk))
-                                current_chunk = []
-                        if current_chunk:
-                            paragraphs.append(" ".join(current_chunk))
-
-                    for i, block in enumerate(paragraphs):
-                        if len(block) < 5:
-                            continue
-                        slide = prs.slides.add_slide(prs.slide_layouts[6])
-                        set_bg(slide)
-                        add_centered(slide, 0.8, 0.6, 11.7, 1.4, f"Section {i+1}", header_size, header_color, True)
-                        add_centered(slide, 1.0, 2.2, 11.3, 4.8, apply_casing(block), max(20, body_size - 6), body_color)
-
-            # Build byte output
             bio = BytesIO()
             prs.save(bio)
             bio.seek(0)
 
-            # Clear the processing message and display success tracking
-            status_box.empty()
-            st.success("🎉 PowerPoint slideshow generated successfully!")
-            
+            st.success("✅ Ready!")
             st.download_button(
-                label="⬇ Click Here to Download PPTX Deck",
+                label="⬇ Download PPTX",
                 data=bio,
-                file_name="Converted_Presentation.pptx",
+                file_name="Dunamis_Prayer_Sessions.pptx",
                 mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 use_container_width=True
             )
-        except Exception as e:
-            status_box.empty()
-            st.error(f"Processing Error: {str(e)}")
 
 st.markdown('</div>', unsafe_allow_html=True)
