@@ -138,7 +138,7 @@ with tab1:
     if uploaded_files:
         st.session_state.uploaded_files = uploaded_files
         
-        # Smart pre-scan to estimate slides/blocks across templates & normal PDFs
+        # Calculate metrics directly on the fly without forcing an aggressive st.rerun()
         temp_blocks = 0
         for file in uploaded_files:
             try:
@@ -146,14 +146,11 @@ with tab1:
                 text = "".join(page.get_text("text") for page in doc)
                 lines = [l.strip() for l in text.split("\n") if l.strip()]
                 
-                # Check if it looks like a structured prayer template
-                has_numbered_lists = any(re.match(r"^\d+\.", l) for l in lines)
-                if has_numbered_lists:
+                if any(re.match(r"^\d+\.", l) for l in lines):
                     temp_blocks += sum(1 for l in lines if re.match(r"^\d+\.", l))
                 else:
-                    # Fallback approximation for normal PDFs (based on double returns or paragraphs)
                     paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-                    temp_blocks += max(1, len(paragraphs) - 1) # exclude title guess
+                    temp_blocks += max(1, len(paragraphs) - 1)
             except Exception:
                 pass
         st.session_state.total_prayers = temp_blocks
