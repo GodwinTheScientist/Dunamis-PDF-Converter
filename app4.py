@@ -184,11 +184,16 @@ with tab2:
 
 # ── Processing & Generation Engine ──────────────────────────────────────────
 st.markdown('<div class="generate-container">', unsafe_allow_html=True)
+
 if st.button("🚀 Generate & Download PPTX", key="generate", use_container_width=True):
-    if not st.session_state.uploaded_files:
+    if 'uploaded_files' not in st.session_state or not st.session_state.uploaded_files:
         st.error("Please upload one or more PDF files before trying to generate presentation files.")
     else:
-        with st.spinner("Processing files and applying adaptive layout logic..."):
+        # Create a container to give real-time status updates right on the UI
+        status_box = st.empty()
+        status_box.info("Processing files and applying adaptive layout logic...")
+        
+        try:
             prs = Presentation()
             prs.slide_width = Inches(13.333)
             prs.slide_height = Inches(7.5)
@@ -224,29 +229,25 @@ if st.button("🚀 Generate & Download PPTX", key="generate", use_container_widt
 
             for idx, file in enumerate(st.session_state.uploaded_files):
                 doc = fitz.open(stream=file.getvalue(), filetype="pdf")
-                
-                # Fetch raw full-text context and line arrays
                 raw_text = "".join(page.get_text("text") for page in doc)
                 lines = [l.strip() for l in raw_text.split("\n") if l.strip()]
                 
                 if not lines:
                     continue
 
-                # ── Determine if Template or General PDF ──
+                # Auto-detect if it's a template or a normal document
                 is_template = any(re.match(r"^\d+\.", l) for l in lines)
                 
-                # Setup base document title
                 doc_title = file.name.replace(".pdf", "").replace("_", " ")
                 if "FRIDAY" in raw_text.upper():
                     doc_title = "Friday Prayer Session"
                 elif "SATURDAY" in raw_text.upper():
                     doc_title = "Saturday Prayer Session"
                 elif not is_template and len(lines) > 0:
-                    # For normal PDFs, guess title from the first line if reasonable length
                     if len(lines[0]) < 60:
                         doc_title = lines[0]
 
-                # Intermission slide between files
+                # Intermission Slide
                 if idx > 0:
                     slide = prs.slides.add_slide(prs.slide_layouts[6])
                     set_bg(slide)
@@ -276,7 +277,6 @@ if st.button("🚀 Generate & Download PPTX", key="generate", use_container_widt
                         add_centered(slide, 0.8, 0.8, 11.7, 1.2, bible_ref, header_size, header_color, True)
                         add_centered(slide, 1.0, 2.2, 11.3, 4.8, bible_text, bible_size, body_color)
 
-                    # Extract numbered items
                     items = []
                     current = ""
                     for line in lines:
@@ -296,56 +296,49 @@ if st.button("🚀 Generate & Download PPTX", key="generate", use_container_widt
                             set_bg(slide)
                             add_centered(slide, 0.8, 0.6, 11.7, 1.4, f"Point {num}", header_size, header_color, True)
                             add_centered(slide, 1.0, 2.2, 11.3, 4.8, apply_casing(p_text.strip()), body_size, body_color)
-
                 else:
-                    # ── GENERIC PDF PROCESSING LOGIC ──
-                    # Chunk using clean line groupings or paragraph breaks
+                    # ── GENERIC / NORMAL PDF PROCESSING LOGIC ──
                     paragraphs = [p.strip() for p in raw_text.split("\n\n") if p.strip()]
                     
-                    # If document doesn't use double line breaks, group text lines into digestible sliding blocks
-                    if len(paragraphs) <= 2:
+                    # Safe fallback if double-newlines don't exist
+                    if len(paragraphs) <= 1:
                         paragraphs = []
                         current_chunk = []
-                        line_count = 0
-                        # Skip the first line if it was used as the title
                         start_idx = 1 if len(lines[0]) < 60 else 0
-                        
                         for line in lines[start_idx:]:
                             current_chunk.append(line)
-                            line_count += 1
-                            # Create a slide block every 4-5 lines or if character limits approach safe boundaries
-                            if line_count >= 4 or len(" ".join(current_chunk)) > 350:
+                            if len(current_chunk) >= 3 or len(" ".join(current_chunk)) > 250:
                                 paragraphs.append(" ".join(current_chunk))
                                 current_chunk = []
-                                line_count = 0
                         if current_chunk:
                             paragraphs.append(" ".join(current_chunk))
 
-                    # Map extracted generic blocks into slides
                     for i, block in enumerate(paragraphs):
-                        # Filter out basic document metadata artifacts
-                        if len(block) < 5 or any(x in block.lower() for x in ["page 1", "all rights reserved"]):
+                        if len(block) < 5:
                             continue
-                        
                         slide = prs.slides.add_slide(prs.slide_layouts[6])
                         set_bg(slide)
-                        
-                        # Generate dynamic slide sub-header context
-                        add_centered(slide, 0.8, 0.6, 11.7, 1.4, f"Overview Section {i+1}" if len(paragraphs) > 1 else "Content", header_size, header_color, True)
-                        # Render body block safely
-                        add_centered(slide, 1.0, 2.2, 11.3, 4.8, apply_casing(block), max(24, body_size - 6), body_color)
+                        add_centered(slide, 0.8, 0.6, 11.7, 1.4, f"Section {i+1}", header_size, header_color, True)
+                        add_centered(slide, 1.0, 2.2, 11.3, 4.8, apply_casing(block), max(20, body_size - 6), body_color)
 
-            # Output and payload assembly
+            # Build byte output
             bio = BytesIO()
             prs.save(bio)
             bio.seek(0)
 
-            st.success("🎉 PowerPoint structures optimized and exported successfully!")
+            # Clear the processing message and display success tracking
+            status_box.empty()
+            st.success("🎉 PowerPoint slideshow generated successfully!")
+            
             st.download_button(
-                label="⬇ Download PPTX Deck",
+                label="⬇ Click Here to Download PPTX Deck",
                 data=bio,
                 file_name="Converted_Presentation.pptx",
                 mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 use_container_width=True
             )
+        except Exception as e:
+            status_box.empty()
+            st.error(f"Processing Error: {str(e)}")
+
 st.markdown('</div>', unsafe_allow_html=True)
