@@ -137,15 +137,22 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# ── Compact Metrics ─────────────────────────────────────────────────────────
+# ── Dynamic Metrics ─────────────────────────────────────────────────────────
+if 'total_prayers' not in st.session_state:
+    st.session_state.total_prayers = 0
+if 'total_sessions' not in st.session_state:
+    st.session_state.total_sessions = 0
+
 cols = st.columns(3)
 with cols[0]:
     num_pdfs = len(st.session_state.get('uploaded_files', []))
     st.markdown(f"<div class='metric-card'><h3>{num_pdfs}</h3><p>Total PDFs</p></div>", unsafe_allow_html=True)
 with cols[1]:
-    st.markdown("<div class='metric-card'><h3>-</h3><p>Prayers</p></div>", unsafe_allow_html=True)
+    prayers_val = st.session_state.total_prayers if st.session_state.total_prayers > 0 else "-"
+    st.markdown(f"<div class='metric-card'><h3>{prayers_val}</h3><p>Slides Extracted</p></div>", unsafe_allow_html=True)
 with cols[2]:
-    st.markdown("<div class='metric-card'><h3>-</h3><p>Sessions</p></div>", unsafe_allow_html=True)
+    sessions_val = st.session_state.total_sessions if st.session_state.total_sessions > 0 else "-"
+    st.markdown(f"<div class='metric-card'><h3>{sessions_val}</h3><p>Sessions</p></div>", unsafe_allow_html=True)
 
 # ── Two compact centered tabs ───────────────────────────────────────────────
 tab1, tab2 = st.tabs(["📁 Upload", "🎨 Customise"])
@@ -155,6 +162,24 @@ with tab1:
     if uploaded_files:
         st.session_state.uploaded_files = uploaded_files
         st.success(f"Uploaded {len(uploaded_files)} PDF(s)")
+        
+        # Safe metric scanner that doesn't affect page re-runs
+        temp_points = 0
+        for f in uploaded_files:
+            try:
+                d = fitz.open(stream=f.getvalue(), filetype="pdf")
+                t = "".join(page.get_text("text") for page in d)
+                lns = [line.strip() for line in t.split("\n") if line.strip()]
+                is_tmpl = any(re.match(r"^\d+\.", l) for l in lns)
+                if is_tmpl:
+                    temp_points += sum(1 for l in lns if re.match(r"^\d+\.", l))
+                else:
+                    paras = [p.strip() for p in t.split("\n\n") if p.strip()]
+                    temp_points += len(paras)
+            except:
+                pass
+        st.session_state.total_prayers = temp_points
+        st.session_state.total_sessions = len(uploaded_files)
 
 with tab2:
     col_left, col_right = st.columns([1, 1])
@@ -204,7 +229,6 @@ if st.button("🚀 Generate & Download PPTX", key="generate"):
                 tf.clear()
                 p = tf.add_paragraph()
                 p.alignment = PP_ALIGN.CENTER
-                # Fixed: Use add_run() instead of referencing non-existent runs[0]
                 run = p.add_run()
                 run.text = text or ""
                 run.font.size = Pt(size)
@@ -224,60 +248,87 @@ if st.button("🚀 Generate & Download PPTX", key="generate"):
                 elif "SATURDAY" in text.upper():
                     title = "Saturday Prayer Session"
 
-                abbr = re.search(r"(IJN=[\s\S]*?ITNJCN=[\s\S]*?Nazareth)", text, re.I)
-                abbr_text = abbr.group(0).strip().replace("\n", " • ") if abbr else ""
-
-                bible_ref, bible_text = "", ""
-                ref = re.search(r"((Genesis|Hebrews)[\s\S]*?\(KJV\))", text, re.I)
-                if ref:
-                    bible_ref = ref.group(1).strip()
-                    start = text.find(bible_ref) + len(bible_ref)
-                    end = text.find("1.", start)
-                    bible_text = text[start:end].strip() if end > start else ""
-
-                prayers = []
-                current = ""
-                for line in lines:
-                    if re.match(r"^\d+\.", line):
-                        if current:
-                            prayers.append(current.strip())
-                        current = line
-                    elif current and not line.startswith(("Page", "Dunamis Bible Church")):
-                        current += " " + line
-                if current:
-                    prayers.append(current.strip())
+                # Check layout blueprint mode safely
+                is_prayer_template = any(re.match(r"^\d+\.", l) for l in lines)
 
                 if idx > 0:
                     slide = prs.slides.add_slide(prs.slide_layouts[6])
                     set_bg(slide)
-                    add_centered(slide, 0.8, 3.0, 11.7, 2.0, f"--- Next Session ---\n{title}", 60, header_color, True)
+                    add_centered(slide, 0.8, 3.0, 11.7, 2.0, f"--- Next Section ---\n{title}", 60, header_color, True)
 
+                # Welcome title layout slide
                 slide = prs.slides.add_slide(prs.slide_layouts[6])
                 set_bg(slide)
-                add_centered(slide, 0.8, 0.5, 11.7, 1.8, f"Dunamis Bible Church", 56, header_color, True)
-                add_centered(slide, 1.2, 5.5, 11.0, 1.0, "PRAYER POINTS", 50, "#CCCCCC")
+                add_centered(slide, 0.8, 0.5, 11.7, 1.8, f"Dunamis Bible Church" if is_prayer_template else "Document Content", 56, header_color, True)
+                add_centered(slide, 1.2, 5.5, 11.0, 1.0, "PRAYER POINTS" if is_prayer_template else title.upper(), 50, "#CCCCCC")
 
-                if include_bible and bible_ref:
-                    slide = prs.slides.add_slide(prs.slide_layouts[6])
-                    set_bg(slide)
-                    add_centered(slide, 0.8, 0.8, 11.7, 1.4, bible_ref, header_size + 4, header_color, True)
-                    add_centered(slide, 1.0, 2.4, 11.3, 4.6, bible_text, bible_size, body_color)
+                if is_prayer_template:
+                    # ── EXACT ORIGINAL WORKING TEMPLATE LOGIC ──
+                    abbr = re.search(r"(IJN=[\s\S]*?ITNJCN=[\s\S]*?Nazareth)", text, re.I)
+                    abbr_text = abbr.group(0).strip().replace("\n", " • ") if abbr else ""
 
-                for prayer in prayers:
-                    m = re.match(r"^(\d+)\.\s*(.*)", prayer, re.DOTALL)
-                    if m:
-                        num, text_content = m.groups()
-                        if text_case == "UPPERCASE":
-                            text_content = text_content.upper()
-                        elif text_case == "lowercase":
-                            text_content = text_content.lower()
-                        elif text_case == "Title Case":
-                            text_content = text_content.title()
+                    bible_ref, bible_text = "", ""
+                    ref = re.search(r"((Genesis|Hebrews)[\s\S]*?\(KJV\))", text, re.I)
+                    if ref:
+                        bible_ref = ref.group(1).strip()
+                        start = text.find(bible_ref) + len(bible_ref)
+                        end = text.find("1.", start)
+                        bible_text = text[start:end].strip() if end > start else ""
 
+                    prayers = []
+                    current = ""
+                    for line in lines:
+                        if re.match(r"^\d+\.", line):
+                            if current:
+                                prayers.append(current.strip())
+                            current = line
+                        elif current and not line.startswith(("Page", "Dunamis Bible Church")):
+                            current += " " + line
+                    if current:
+                        prayers.append(current.strip())
+
+                    if include_bible and bible_ref:
                         slide = prs.slides.add_slide(prs.slide_layouts[6])
                         set_bg(slide)
-                        add_centered(slide, 0.8, 0.6, 11.7, 1.6, f"Prayer Point {num}", header_size, header_color, True)
-                        add_centered(slide, 1.0, 2.4, 11.3, 4.5, text_content.strip(), body_size, body_color)
+                        add_centered(slide, 0.8, 0.8, 11.7, 1.4, bible_ref, header_size + 4, header_color, True)
+                        add_centered(slide, 1.0, 2.4, 11.3, 4.6, bible_text, bible_size, body_color)
+
+                    for prayer in prayers:
+                        m = re.match(r"^(\d+)\.\s*(.*)", prayer, re.DOTALL)
+                        if m:
+                            num, text_content = m.groups()
+                            if text_case == "UPPERCASE":
+                                text_content = text_content.upper()
+                            elif text_case == "lowercase":
+                                text_content = text_content.lower()
+                            elif text_case == "Title Case":
+                                text_content = text_content.title()
+
+                            slide = prs.slides.add_slide(prs.slide_layouts[6])
+                            set_bg(slide)
+                            add_centered(slide, 0.8, 0.6, 11.7, 1.6, f"Prayer Point {num}", header_size, header_color, True)
+                            add_centered(slide, 1.0, 2.4, 11.3, 4.5, text_content.strip(), body_size, body_color)
+                else:
+                    # ── SAFE GENERIC FALLBACK FOR NORMAL PDFs ──
+                    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+                    if len(paragraphs) <= 1:
+                        paragraphs = []
+                        chunk = []
+                        for line in lines:
+                            chunk.append(line)
+                            if len(chunk) >= 4:
+                                paragraphs.append(" ".join(chunk))
+                                chunk = []
+                        if chunk:
+                            paragraphs.append(" ".join(chunk))
+
+                    for i, para in enumerate(paragraphs):
+                        if len(para) < 5:
+                            continue
+                        slide = prs.slides.add_slide(prs.slide_layouts[6])
+                        set_bg(slide)
+                        add_centered(slide, 0.8, 0.6, 11.7, 1.6, f"Section {i+1}", header_size, header_color, True)
+                        add_centered(slide, 1.0, 2.4, 11.3, 4.5, para, max(24, body_size - 8), body_color)
 
             bio = BytesIO()
             prs.save(bio)
