@@ -113,7 +113,7 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# ── Dynamic Realtime Metric Initializers ────────────────────────────────────
+# ── Dynamic Metric Initializers ─────────────────────────────────────────────
 if 'total_prayers_count' not in st.session_state:
     st.session_state.total_prayers_count = "-"
 if 'total_sessions_count' not in st.session_state:
@@ -136,7 +136,6 @@ with tab1:
         st.session_state.uploaded_files = uploaded_files
         st.success(f"Uploaded {len(uploaded_files)} PDF(s)")
         
-        # Calculate dynamic counts instantly based on the updated regex rules
         prayers_found = 0
         for f in uploaded_files:
             try:
@@ -166,8 +165,8 @@ with tab2:
         body_color = st.color_picker("Body", "#FFFFFF")
 
     with col_right:
-        header_size = st.slider("Header size", 40, 90, 68)
-        body_size = st.slider("Body size", 30, 80, 48)
+        header_size = st.slider("Header size", 40, 100, 72)
+        body_size = st.slider("Maximum Body size", 40, 100, 64)
         text_case = st.selectbox("Text case", ["Original", "UPPERCASE", "lowercase", "Title Case"])
 
 # ── Cleaned Prayer Points Generation Engine ─────────────────────────────────
@@ -189,10 +188,8 @@ if st.button("🚀 Generate & Download PPTX", key="generate"):
             def clean_text_block(txt):
                 if not txt:
                     return ""
-                # Strip variable spacing page markers: "P a g e  1 | 2", "Page 2", etc.
                 txt = re.sub(r"P\s*a\s*g\s*e\s*\d+\s*\|\s*\d+", "", txt, flags=re.I)
                 txt = re.sub(r"Page\s*\d+", "", txt, flags=re.I)
-                # Remove repeated header text and metadata details
                 txt = re.sub(r"Dunamis Bible Church.*", "", txt, flags=re.I)
                 txt = re.sub(r"\(AKA.* Charity.*", "", txt, flags=re.I)
                 return txt.strip()
@@ -203,7 +200,6 @@ if st.button("🚀 Generate & Download PPTX", key="generate"):
                 tf.word_wrap = True
                 tf.clear()
                 
-                # Zero out internal margins to prevent bounds truncation bugs
                 tf.margin_top = Inches(0)
                 tf.margin_bottom = Inches(0)
                 tf.margin_left = Inches(0)
@@ -232,33 +228,26 @@ if st.button("🚀 Generate & Download PPTX", key="generate"):
                 elif "SATURDAY" in text.upper():
                     title = "Saturday Prayer Session"
 
-                # Structural Intermission slides
                 if idx > 0:
                     slide = prs.slides.add_slide(prs.slide_layouts[6])
                     set_bg(slide)
                     add_centered(slide, 0.8, 2.8, 11.7, 2.0, f"--- Next Session ---\n{title}", 56, header_color, True)
 
-                # Welcome Cover Slide
                 slide = prs.slides.add_slide(prs.slide_layouts[6])
                 set_bg(slide)
                 add_centered(slide, 0.8, 1.2, 11.7, 1.8, f"Dunamis Bible Church", 56, header_color, True)
                 add_centered(slide, 1.2, 4.8, 11.0, 1.2, "PRAYER POINTS", 50, "#CCCCCC")
 
-                # Parse and isolate individual elements sequentially
                 prayers = []
                 current = ""
                 
                 for line in lines:
-                    # Instantly ignore operational/address block metadata lines
                     if any(m in line.lower() for m in ["charity no", "dunamis centre", "northmoor", "manchester m12", "info@", "+44", "prayer session"]):
                         continue
-                    # Ignore structural page banners completely
                     if re.match(r"^P\s*a\s*g\s*e\s*\d+", line, re.I) or line.strip() == "Dunamis Bible Church" or "PRAYER POINTS" in line:
                         continue
-                    # Ignore abbreviation indexes and standalone script references explicitly
                     if any(x in line for x in ["IJN=", "ITNJ=", "ITMNJ=", "ITNJCN=", "(KJV)"]):
                         continue
-                    # Filter out stray biblical text lines preceding numerical items
                     if not current and not re.match(r"^\d+\.", line) and not re.match(r"^Prayer Point\s*\d+", line, re.I):
                         continue
                         
@@ -271,7 +260,6 @@ if st.button("🚀 Generate & Download PPTX", key="generate"):
                 if current:
                     prayers.append(current.strip())
 
-                # Generate slide arrays for extracted content elements
                 for prayer in prayers:
                     m = re.match(r"^(?:Prayer Point\s*)?(\d+)[\.\s]*(.*)", prayer, re.DOTALL | re.I)
                     if m:
@@ -291,25 +279,33 @@ if st.button("🚀 Generate & Download PPTX", key="generate"):
                         set_bg(slide)
                         add_centered(slide, 0.8, 0.6, 11.7, 1.4, f"Prayer Point {num}", header_size, header_color, True)
                         
-                        # Apply downscaling safety logic dynamically to prevent lower edge overflow
+                        # ── Intelligent Font-Scaling Rule ──
                         current_body_size = body_size
-                        if len(text_content) > 280:
-                            current_body_size = max(24, body_size - 14)
-                        elif len(text_content) > 140:
-                            current_body_size = max(28, body_size - 6)
+                        char_count = len(text_content)
+                        
+                        if char_count > 250:
+                            current_body_size = max(32, int(body_size * 0.55)) 
+                        elif char_count > 130:
+                            current_body_size = max(40, int(body_size * 0.75)) 
+                        elif char_count < 60:
+                            current_body_size = min(80, int(body_size * 1.2))  
 
-                        # Set text parameters with expanded safe box area (y=2.2, h=4.8)
-                        add_centered(slide, 0.8, 2.2, 11.7, 4.8, text_content, current_body_size, body_color)
+                        # Dynamic spacing adjustment
+                        box_top = 2.4 if char_count > 130 else 3.0
+                        box_height = 4.6 if char_count > 130 else 3.5
+
+                        # FIX: bold parameter set to True to force BOLD on the prayer point body
+                        add_centered(slide, 0.8, box_top, 11.7, box_height, text_content, current_body_size, body_color, bold=True)
 
             bio = BytesIO()
             prs.save(bio)
             bio.seek(0)
 
-            st.success("✅ Layout Generation Complete!")
+            st.success("✅ Presentation Layouts Optimized and Set to Bold!")
             st.download_button(
                 label="⬇ Download PPTX",
                 data=bio,
-                file_name="Dunamis_Prayer_Points.pptx",
+                file_name="Dunamis_Bold_Prayer_Points.pptx",
                 mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 use_container_width=True
             )
