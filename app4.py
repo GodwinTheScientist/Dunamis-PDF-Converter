@@ -113,7 +113,7 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# ── Dynamic Metric Initializers ─────────────────────────────────────────────
+# ── Dynamic Realtime Metric Syncing ─────────────────────────────────────────
 if 'total_prayers_count' not in st.session_state:
     st.session_state.total_prayers_count = "-"
 if 'total_sessions_count' not in st.session_state:
@@ -169,7 +169,7 @@ with tab2:
         body_size = st.slider("Maximum Body size", 40, 100, 64)
         text_case = st.selectbox("Text case", ["Original", "UPPERCASE", "lowercase", "Title Case"])
 
-# ── Cleaned Prayer Points Generation Engine ─────────────────────────────────
+# ── PowerPoint Generation Engine ────────────────────────────────────────────
 st.markdown('<div class="generate-container">', unsafe_allow_html=True)
 if st.button("🚀 Generate & Download PPTX", key="generate"):
     if 'uploaded_files' not in st.session_state or not st.session_state.uploaded_files:
@@ -277,35 +277,36 @@ if st.button("🚀 Generate & Download PPTX", key="generate"):
 
                         slide = prs.slides.add_slide(prs.slide_layouts[6])
                         set_bg(slide)
-                        add_centered(slide, 0.8, 0.6, 11.7, 1.4, f"Prayer Point {num}", header_size, header_color, True)
                         
-                        # ── Intelligent Font-Scaling Rule ──
+                        # Section Header Title 
+                        add_centered(slide, 0.8, 0.5, 11.7, 1.2, f"Prayer Point {num}", header_size, header_color, True)
+                        
+                        # ── Strict Scaling Rules for Bold Presentation ──
                         current_body_size = body_size
                         char_count = len(text_content)
                         
-                        if char_count > 250:
-                            current_body_size = max(32, int(body_size * 0.55)) 
-                        elif char_count > 130:
-                            current_body_size = max(40, int(body_size * 0.75)) 
+                        if char_count > 320:
+                            current_body_size = max(28, int(body_size * 0.52))  # Drastic reductions for very long text
+                        elif char_count > 200:
+                            current_body_size = max(36, int(body_size * 0.68))  # Moderate safety sizing
                         elif char_count < 60:
-                            current_body_size = min(80, int(body_size * 1.2))  
+                            current_body_size = min(80, int(body_size * 1.2))   # Expand short sentences to look great
+                        
+                        # Expanded Bounding Layout: Height is stretched to 5.6 to use all available vertical space safely
+                        box_top = 1.6 if char_count > 200 else 2.6
+                        box_height = 5.6 if char_count > 200 else 4.0
 
-                        # Dynamic spacing adjustment
-                        box_top = 2.4 if char_count > 130 else 3.0
-                        box_height = 4.6 if char_count > 130 else 3.5
-
-                        # FIX: bold parameter set to True to force BOLD on the prayer point body
                         add_centered(slide, 0.8, box_top, 11.7, box_height, text_content, current_body_size, body_color, bold=True)
 
             bio = BytesIO()
             prs.save(bio)
             bio.seek(0)
 
-            st.success("✅ Presentation Layouts Optimized and Set to Bold!")
+            st.success("✅ Presentation Layouts Complete with Dynamic Text Layout Overflows Guarded!")
             st.download_button(
                 label="⬇ Download PPTX",
                 data=bio,
-                file_name="Dunamis_Bold_Prayer_Points.pptx",
+                file_name="Dunamis_Perfect_Prayer_Points.pptx",
                 mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 use_container_width=True
             )
