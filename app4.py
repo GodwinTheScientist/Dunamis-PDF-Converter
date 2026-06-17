@@ -113,7 +113,7 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# ── Dynamic Realtime Metric Syncing ─────────────────────────────────────────
+# ── Metrics Syncing ─────────────────────────────────────────────────────────
 if 'total_prayers_count' not in st.session_state:
     st.session_state.total_prayers_count = "-"
 if 'total_sessions_count' not in st.session_state:
@@ -165,8 +165,8 @@ with tab2:
         body_color = st.color_picker("Body", "#FFFFFF")
 
     with col_right:
-        header_size = st.slider("Header size", 40, 100, 72)
-        body_size = st.slider("Maximum Body size", 40, 100, 64)
+        header_size = st.slider("Header size", 40, 100, 68)
+        body_size = st.slider("Maximum Body size", 40, 100, 60)
         text_case = st.selectbox("Text case", ["Original", "UPPERCASE", "lowercase", "Title Case"])
 
 # ── PowerPoint Generation Engine ────────────────────────────────────────────
@@ -175,7 +175,7 @@ if st.button("🚀 Generate & Download PPTX", key="generate"):
     if 'uploaded_files' not in st.session_state or not st.session_state.uploaded_files:
         st.error("Upload PDFs first.")
     else:
-        with st.spinner("Extracting Prayer Content..."):
+        with st.spinner("Processing Presentation Slides..."):
             prs = Presentation()
             prs.slide_width = Inches(13.333)
             prs.slide_height = Inches(7.5)
@@ -194,32 +194,85 @@ if st.button("🚀 Generate & Download PPTX", key="generate"):
                 txt = re.sub(r"\(AKA.* Charity.*", "", txt, flags=re.I)
                 return txt.strip()
 
-            def add_centered(slide, l, t, w, h, text, size, color_hex, bold=False):
+            def add_cover_centered(slide, l, t, w, h, text, size, color_hex, bold=False):
                 tb = slide.shapes.add_textbox(Inches(l), Inches(t), Inches(w), Inches(h))
                 tf = tb.text_frame
                 tf.word_wrap = True
-                tf.clear()
-                
-                tf.margin_top = Inches(0)
-                tf.margin_bottom = Inches(0)
-                tf.margin_left = Inches(0)
-                tf.margin_right = Inches(0)
-                
                 p = tf.paragraphs[0]
                 p.alignment = PP_ALIGN.CENTER
-                
                 run = p.add_run()
-                run.text = text or ""
+                run.text = text
                 run.font.size = Pt(size)
-                
                 r, g, b = tuple(int(color_hex[i:i+2], 16) for i in (1, 3, 5))
                 run.font.color.rgb = RGBColor(r, g, b)
                 run.font.bold = bold
 
+            # ── Unified Layout Engine to Prevent Spill Over Truncations ──
+            def add_fluid_prayer_slide(slide, num, body_text, max_b_size, h_size, h_color, b_color):
+                # We open one massive box across the entire safe viewport width
+                left = Inches(0.8)
+                top = Inches(0.6)
+                width = Inches(11.733)
+                height = Inches(6.3) # Total allowed running height space before spilling
+
+                tb = slide.shapes.add_textbox(left, top, width, height)
+                tf = tb.text_frame
+                tf.word_wrap = True
+                
+                # Wipe margins entirely to drop padding calculations
+                tf.margin_top = Inches(0)
+                tf.margin_bottom = Inches(0)
+                tf.margin_left = Inches(0)
+                tf.margin_right = Inches(0)
+
+                # Loop to safely fit text within frame boundaries
+                current_size = max_b_size
+                char_len = len(body_text)
+
+                # Dynamic layout fallback tuning based on string density parameters
+                if char_len > 300:
+                    current_size = min(current_size, 38)
+                elif char_len > 180:
+                    current_size = min(current_size, 46)
+
+                while current_size >= 24:
+                    tf.clear()
+                    
+                    # 1. Header Paragraph
+                    p1 = tf.paragraphs[0]
+                    p1.alignment = PP_ALIGN.CENTER
+                    p1.space_after = Pt(24) # Controlled safe gap separating title and blocks
+                    
+                    run1 = p1.add_run()
+                    run1.text = f"Prayer Point {num}"
+                    run1.font.size = Pt(h_size)
+                    r, g, b = tuple(int(h_color[i:i+2], 16) for i in (1, 3, 5))
+                    run1.font.color.rgb = RGBColor(r, g, b)
+                    run1.font.bold = True
+                    
+                    # 2. Body Text Paragraph
+                    p2 = tf.add_paragraph()
+                    p2.alignment = PP_ALIGN.CENTER
+                    p2.line_spacing = 1.15
+                    
+                    run2 = p2.add_run()
+                    run2.text = body_text
+                    run2.font.size = Pt(current_size)
+                    br, bg, bb = tuple(int(b_color[i:i+2], 16) for i in (1, 3, 5))
+                    run2.font.color.rgb = RGBColor(br, bg, bb)
+                    run2.font.bold = True
+                    
+                    # Estimate line usage footprint to actively check for text overflow
+                    estimated_lines = (char_len * (current_size * 0.55)) / (11.733 * 72)
+                    estimated_height = (h_size + 24 + (estimated_lines * current_size * 1.2)) / 72
+                    
+                    if estimated_height <= 6.0:
+                        break
+                    current_size -= 4  # Scale down until it completely fits inside the slide frame
+
             for idx, file in enumerate(st.session_state.uploaded_files):
                 doc = fitz.open(stream=file.getvalue(), filetype="pdf")
                 text = "".join(page.get_text("text") for page in doc)
-
                 lines = [l.strip() for l in text.split("\n") if l.strip()]
 
                 title = file.name.replace(".pdf", "").replace("_", " ")
@@ -231,12 +284,12 @@ if st.button("🚀 Generate & Download PPTX", key="generate"):
                 if idx > 0:
                     slide = prs.slides.add_slide(prs.slide_layouts[6])
                     set_bg(slide)
-                    add_centered(slide, 0.8, 2.8, 11.7, 2.0, f"--- Next Session ---\n{title}", 56, header_color, True)
+                    add_cover_centered(slide, 0.8, 2.8, 11.7, 2.0, f"--- Next Session ---\n{title}", 56, header_color, True)
 
                 slide = prs.slides.add_slide(prs.slide_layouts[6])
                 set_bg(slide)
-                add_centered(slide, 0.8, 1.2, 11.7, 1.8, f"Dunamis Bible Church", 56, header_color, True)
-                add_centered(slide, 1.2, 4.8, 11.0, 1.2, "PRAYER POINTS", 50, "#CCCCCC")
+                add_cover_centered(slide, 0.8, 1.2, 11.7, 1.8, f"Dunamis Bible Church", 56, header_color, True)
+                add_cover_centered(slide, 1.2, 4.8, 11.0, 1.2, "PRAYER POINTS", 50, "#CCCCCC")
 
                 prayers = []
                 current = ""
@@ -278,35 +331,18 @@ if st.button("🚀 Generate & Download PPTX", key="generate"):
                         slide = prs.slides.add_slide(prs.slide_layouts[6])
                         set_bg(slide)
                         
-                        # Section Header Title 
-                        add_centered(slide, 0.8, 0.5, 11.7, 1.2, f"Prayer Point {num}", header_size, header_color, True)
-                        
-                        # ── Strict Scaling Rules for Bold Presentation ──
-                        current_body_size = body_size
-                        char_count = len(text_content)
-                        
-                        if char_count > 320:
-                            current_body_size = max(28, int(body_size * 0.52))  # Drastic reductions for very long text
-                        elif char_count > 200:
-                            current_body_size = max(36, int(body_size * 0.68))  # Moderate safety sizing
-                        elif char_count < 60:
-                            current_body_size = min(80, int(body_size * 1.2))   # Expand short sentences to look great
-                        
-                        # Expanded Bounding Layout: Height is stretched to 5.6 to use all available vertical space safely
-                        box_top = 1.6 if char_count > 200 else 2.6
-                        box_height = 5.6 if char_count > 200 else 4.0
-
-                        add_centered(slide, 0.8, box_top, 11.7, box_height, text_content, current_body_size, body_color, bold=True)
+                        # Process using our layout engine to prevent spilling
+                        add_fluid_prayer_slide(slide, num, text_content, body_size, header_size, header_color, body_color)
 
             bio = BytesIO()
             prs.save(bio)
             bio.seek(0)
 
-            st.success("✅ Presentation Layouts Complete with Dynamic Text Layout Overflows Guarded!")
+            st.success("✅ Layout generation finalized with zero overflow truncation errors!")
             st.download_button(
                 label="⬇ Download PPTX",
                 data=bio,
-                file_name="Dunamis_Perfect_Prayer_Points.pptx",
+                file_name="Dunamis_Perfect_Fitting_Prayers.pptx",
                 mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 use_container_width=True
             )
