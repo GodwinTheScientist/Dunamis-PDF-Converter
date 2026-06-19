@@ -338,11 +338,11 @@ if st.button("🚀 Generate & Download PPTX", key="generate"):
             prs.save(bio)
             bio.seek(0)
 
-            st.success("✅ Layout generation finalized with zero overflow truncation errors!")
+            st.success("✅ Layout Generated Successfully!")
             st.download_button(
                 label="⬇ Download PPTX",
                 data=bio,
-                file_name="Dunamis_Perfect_Fitting_Prayers.pptx",
+                file_name="Dunamis_Prayer_Points.pptx",
                 mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 use_container_width=True
             )
