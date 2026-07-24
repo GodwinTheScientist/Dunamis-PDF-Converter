@@ -141,7 +141,8 @@ with tab1:
             try:
                 doc = fitz.open(stream=f.getvalue(), filetype="pdf")
                 full_text = "".join(p.get_text("text") for p in doc)
-                prayers_found += len(re.findall(r"^\s*(?:Prayer Point\s*\d+|\d+\.)", full_text, re.M | re.I))
+                # Updated Regex to count (1), 1., 1), or Prayer Point 1
+                prayers_found += len(re.findall(r"^\s*(?:Prayer Point\s*\d+|\(?\d+\)?[\.\s])", full_text, re.M | re.I))
             except:
                 pass
         st.session_state.total_prayers_count = prayers_found if prayers_found > 0 else "Detected"
@@ -209,27 +210,23 @@ if st.button("🚀 Generate & Download PPTX", key="generate"):
 
             # ── Unified Layout Engine to Prevent Spill Over Truncations ──
             def add_fluid_prayer_slide(slide, num, body_text, max_b_size, h_size, h_color, b_color):
-                # We open one massive box across the entire safe viewport width
                 left = Inches(0.8)
                 top = Inches(0.6)
                 width = Inches(11.733)
-                height = Inches(6.3) # Total allowed running height space before spilling
+                height = Inches(6.3) 
 
                 tb = slide.shapes.add_textbox(left, top, width, height)
                 tf = tb.text_frame
                 tf.word_wrap = True
                 
-                # Wipe margins entirely to drop padding calculations
                 tf.margin_top = Inches(0)
                 tf.margin_bottom = Inches(0)
                 tf.margin_left = Inches(0)
                 tf.margin_right = Inches(0)
 
-                # Loop to safely fit text within frame boundaries
                 current_size = max_b_size
                 char_len = len(body_text)
 
-                # Dynamic layout fallback tuning based on string density parameters
                 if char_len > 300:
                     current_size = min(current_size, 38)
                 elif char_len > 180:
@@ -238,10 +235,9 @@ if st.button("🚀 Generate & Download PPTX", key="generate"):
                 while current_size >= 24:
                     tf.clear()
                     
-                    # 1. Header Paragraph
                     p1 = tf.paragraphs[0]
                     p1.alignment = PP_ALIGN.CENTER
-                    p1.space_after = Pt(24) # Controlled safe gap separating title and blocks
+                    p1.space_after = Pt(24)
                     
                     run1 = p1.add_run()
                     run1.text = f"Prayer Point {num}"
@@ -250,7 +246,6 @@ if st.button("🚀 Generate & Download PPTX", key="generate"):
                     run1.font.color.rgb = RGBColor(r, g, b)
                     run1.font.bold = True
                     
-                    # 2. Body Text Paragraph
                     p2 = tf.add_paragraph()
                     p2.alignment = PP_ALIGN.CENTER
                     p2.line_spacing = 1.15
@@ -262,13 +257,15 @@ if st.button("🚀 Generate & Download PPTX", key="generate"):
                     run2.font.color.rgb = RGBColor(br, bg, bb)
                     run2.font.bold = True
                     
-                    # Estimate line usage footprint to actively check for text overflow
                     estimated_lines = (char_len * (current_size * 0.55)) / (11.733 * 72)
                     estimated_height = (h_size + 24 + (estimated_lines * current_size * 1.2)) / 72
                     
                     if estimated_height <= 6.0:
                         break
-                    current_size -= 4  # Scale down until it completely fits inside the slide frame
+                    current_size -= 4
+
+            # Helper pattern to check if a line is a prayer point start
+            is_prayer_start = lambda line: bool(re.match(r"^\(?\d+\)?[\.\s]", line) or re.match(r"^Prayer Point\s*\d+", line, re.I))
 
             for idx, file in enumerate(st.session_state.uploaded_files):
                 doc = fitz.open(stream=file.getvalue(), filetype="pdf")
@@ -301,10 +298,10 @@ if st.button("🚀 Generate & Download PPTX", key="generate"):
                         continue
                     if any(x in line for x in ["IJN=", "ITNJ=", "ITMNJ=", "ITNJCN=", "(KJV)"]):
                         continue
-                    if not current and not re.match(r"^\d+\.", line) and not re.match(r"^Prayer Point\s*\d+", line, re.I):
+                    if not current and not is_prayer_start(line):
                         continue
                         
-                    if re.match(r"^\d+\.", line) or re.match(r"^Prayer Point\s*\d+", line, re.I):
+                    if is_prayer_start(line):
                         if current:
                             prayers.append(current.strip())
                         current = line
@@ -314,7 +311,8 @@ if st.button("🚀 Generate & Download PPTX", key="generate"):
                     prayers.append(current.strip())
 
                 for prayer in prayers:
-                    m = re.match(r"^(?:Prayer Point\s*)?(\d+)[\.\s]*(.*)", prayer, re.DOTALL | re.I)
+                    # Capture number whether inside brackets e.g. (1), (2) or plain 1., 2.
+                    m = re.match(r"^(?:Prayer Point\s*)?\(?(\d+)\)?[\.\s]*(.*)", prayer, re.DOTALL | re.I)
                     if m:
                         num, text_content = m.groups()
                         text_content = clean_text_block(text_content)
@@ -331,7 +329,6 @@ if st.button("🚀 Generate & Download PPTX", key="generate"):
                         slide = prs.slides.add_slide(prs.slide_layouts[6])
                         set_bg(slide)
                         
-                        # Process using our layout engine to prevent spilling
                         add_fluid_prayer_slide(slide, num, text_content, body_size, header_size, header_color, body_color)
 
             bio = BytesIO()
