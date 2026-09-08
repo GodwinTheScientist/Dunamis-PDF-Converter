@@ -133,7 +133,7 @@ if 'total_sessions_count' not in st.session_state:
     st.session_state.total_sessions_count = "-"
 
 # ── Step 1: Upload ────────────────────────────────────────────────────────────
-st.markdown('<p class="section-heading">📁 1. Upload your PDFs</p>', unsafe_allow_html=True)
+st.markdown('<p class="section-heading"> 1. Upload your PDFs</p>', unsafe_allow_html=True)
 with st.container(border=True):
     doc_type_choice = st.selectbox(
         "Document type",
@@ -185,7 +185,7 @@ if st.session_state.get('uploaded_files'):
     )
 
 # ── Step 2: Customize (optional, collapsed by default) ───────────────────────
-with st.expander("🎨 2. Customize appearance (optional)", expanded=False):
+with st.expander(" 2. Customize appearance (optional)", expanded=False):
     col_left, col_right = st.columns([1, 1])
     with col_left:
         bg_option = st.radio("Background", ["Dark Navy", "Black", "Deep Purple", "Custom"])
