@@ -46,83 +46,54 @@ st.markdown(f"""
         font-size: 1.1rem;
         margin: 8px 0 0 0;
     }}
-    [data-testid="stTabList"] {{
-        display: flex !important;
-        justify-content: center !important;
-        max-width: 600px !important;
-        margin: 0 auto 20px auto !important;
-        background: rgba(255,255,255,0.06) !important;
-        border-radius: 12px !important;
-        padding: 6px !important;
-        backdrop-filter: blur(12px) !important;
-    }}
-    [data-testid="stTab"] {{
-        color: #CBD5E1 !important;
-        font-weight: 600;
-        padding: 10px 24px !important;
-        font-size: 1rem !important;
-    }}
-    [aria-selected="true"] {{
-        background: rgba(255,215,0,0.25) !important;
-        color: #FFD700 !important;
-        border-radius: 8px !important;
-        padding: 6px !important;
-    }}
     .block-container {{
-        max-width: 900px !important;
+        max-width: 700px !important;
         margin: 0 auto !important;
         padding: 0 20px !important;
     }}
-    .stTabs > div > div:has(> *) {{
+    .section-heading {{
+        color: #FFD700;
+        font-size: 1.1rem;
+        font-weight: 700;
+        margin: 34px 0 10px 0;
+    }}
+    /* Cards: st.container(border=True) and st.expander both render as real
+       nested Streamlit containers (unlike raw HTML divs split across separate
+       st.markdown calls, which don't actually wrap anything placed between
+       them). Styling these testids gives every step the same glass-card look.
+       Note: internal testids can change between Streamlit versions - if this
+       doesn't pick up styling after an upgrade, re-check via browser devtools. */
+    [data-testid="stVerticalBlockBorderWrapper"], [data-testid="stExpander"] {{
         background: rgba(255,255,255,0.08) !important;
         backdrop-filter: blur(16px) !important;
         border-radius: 16px !important;
         border: 1px solid rgba(255,255,255,0.12) !important;
         box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important;
-        padding: 25px 20px !important;
-        margin: 15px auto !important;
     }}
-    /* Match the metric-card row's width/centering to the tab panel below it,
-       since they otherwise inherit different widths from the block-container. */
-    [data-testid="stHorizontalBlock"] {{
-        max-width: 600px !important;
-        margin: 0 auto 20px auto !important;
+    [data-testid="stExpander"] summary {{
+        color: #FFD700 !important;
+        font-weight: 600 !important;
     }}
-    /* st.button/st.download_button live in their own DOM node, not inside
-       whatever <div> a nearby st.markdown call opens - centering them needs
-       to target their actual container directly. */
-    [data-testid="stButton"], [data-testid="stDownloadButton"] {{
-        display: flex !important;
-        justify-content: center !important;
+    .stats-strip {{
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 22px;
+        padding: 4px 0 2px 0;
+        color: #CBD5E1;
+        font-size: 0.95rem;
     }}
-    [data-testid="stButton"] {{
-        margin-top: 40px !important;
-    }}
-    [data-testid="stDownloadButton"] {{
-        margin-bottom: 40px !important;
+    .stats-strip b {{
+        color: #FFD700;
     }}
     [data-testid="stButton"] button, [data-testid="stDownloadButton"] button {{
-        width: 100%;
-        max-width: 600px;
-    }}
-    .metric-card {{
-        background: rgba(255,255,255,0.08) !important;
-        backdrop-filter: blur(16px) !important;
-        border-radius: 16px !important;
-        border: 1px solid rgba(255,255,255,0.12) !important;
-        box-shadow: 0 8px 20px rgba(0,0,0,0.5) !important;
-        padding: 20px !important;
-        text-align: center;
-    }}
-    .metric-card h3 {{
-        color: #FFD700 !important;
-        font-size: 2.4rem !important;
-        margin: 0 !important;
-    }}
-    .metric-card p {{
-        color: #CBD5E1 !important;
-        font-size: 0.95rem !important;
-        margin: 6px 0 0 !important;
+        background: linear-gradient(135deg, #FFD700, #E8B923) !important;
+        color: #14172B !important;
+        font-weight: 700 !important;
+        border: none !important;
+        padding: 14px !important;
+        font-size: 1.05rem !important;
+        margin-top: 6px !important;
     }}
     </style>
 
@@ -161,18 +132,9 @@ if 'total_prayers_count' not in st.session_state:
 if 'total_sessions_count' not in st.session_state:
     st.session_state.total_sessions_count = "-"
 
-cols = st.columns(3)
-with cols[0]:
-    num_pdfs = len(st.session_state.get('uploaded_files', []))
-    st.markdown(f"<div class='metric-card'><h3>{num_pdfs}</h3><p>Total PDFs</p></div>", unsafe_allow_html=True)
-with cols[1]:
-    st.markdown(f"<div class='metric-card'><h3>{st.session_state.total_prayers_count}</h3><p>Prayers</p></div>", unsafe_allow_html=True)
-with cols[2]:
-    st.markdown(f"<div class='metric-card'><h3>{st.session_state.total_sessions_count}</h3><p>Sessions</p></div>", unsafe_allow_html=True)
-
-tab1, tab2 = st.tabs(["📁 Upload", "🎨 Customise"])
-
-with tab1:
+# ── Step 1: Upload ────────────────────────────────────────────────────────────
+st.markdown('<p class="section-heading">📁 1. Upload your PDFs</p>', unsafe_allow_html=True)
+with st.container(border=True):
     doc_type_choice = st.selectbox(
         "Document type",
         ["Auto-detect", "Church Prayer Points", "General Document"],
@@ -183,7 +145,6 @@ with tab1:
     uploaded_files = st.file_uploader("Upload PDFs", type=["pdf"], accept_multiple_files=True)
     if uploaded_files:
         st.session_state.uploaded_files = uploaded_files
-        st.success(f"Uploaded {len(uploaded_files)} PDF(s)")
 
         prayers_found = 0
         sections_found = 0
@@ -212,7 +173,19 @@ with tab1:
             for name, label in previews:
                 st.caption(f"**{name}** — {label}")
 
-with tab2:
+# Slim stats strip - only takes up space once there's something to report.
+if st.session_state.get('uploaded_files'):
+    st.markdown(
+        f"<div class='stats-strip'>"
+        f"📄 <b>{len(st.session_state.uploaded_files)}</b> PDFs&nbsp;&nbsp;•&nbsp;&nbsp;"
+        f"🙏 <b>{st.session_state.total_prayers_count}</b> prayers&nbsp;&nbsp;•&nbsp;&nbsp;"
+        f"📚 <b>{st.session_state.total_sessions_count}</b> sessions"
+        f"</div>",
+        unsafe_allow_html=True
+    )
+
+# ── Step 2: Customize (optional, collapsed by default) ───────────────────────
+with st.expander("🎨 2. Customize appearance (optional)", expanded=False):
     col_left, col_right = st.columns([1, 1])
     with col_left:
         bg_option = st.radio("Background", ["Dark Navy", "Black", "Deep Purple", "Custom"])
@@ -234,6 +207,9 @@ with tab2:
         body_size = st.slider("Maximum Body size", 40, 100, 60)
         text_case = st.selectbox("Text case", ["Original", "UPPERCASE", "lowercase", "Title Case"])
 
+# ── Step 3: Generate ──────────────────────────────────────────────────────────
+st.markdown('<p class="section-heading">🚀 3. Generate your presentation</p>', unsafe_allow_html=True)
+
 
 def apply_case(text_case, value):
     if not value:
@@ -248,7 +224,7 @@ def apply_case(text_case, value):
 
 
 # ── PowerPoint Generation Engine ────────────────────────────────────────────
-if st.button("🚀 Generate & Download PPTX", key="generate"):
+if st.button("Generate & Download PPTX", key="generate", use_container_width=True):
     if 'uploaded_files' not in st.session_state or not st.session_state.uploaded_files:
         st.error("Upload PDFs first.")
     else:
