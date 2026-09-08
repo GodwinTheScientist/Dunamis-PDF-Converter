@@ -82,9 +82,28 @@ st.markdown(f"""
         padding: 25px 20px !important;
         margin: 15px auto !important;
     }}
-    .generate-container {{
-        text-align: center;
-        margin: 40px 0 40px 0;
+    /* Match the metric-card row's width/centering to the tab panel below it,
+       since they otherwise inherit different widths from the block-container. */
+    [data-testid="stHorizontalBlock"] {{
+        max-width: 600px !important;
+        margin: 0 auto 20px auto !important;
+    }}
+    /* st.button/st.download_button live in their own DOM node, not inside
+       whatever <div> a nearby st.markdown call opens - centering them needs
+       to target their actual container directly. */
+    [data-testid="stButton"], [data-testid="stDownloadButton"] {{
+        display: flex !important;
+        justify-content: center !important;
+    }}
+    [data-testid="stButton"] {{
+        margin-top: 40px !important;
+    }}
+    [data-testid="stDownloadButton"] {{
+        margin-bottom: 40px !important;
+    }}
+    [data-testid="stButton"] button, [data-testid="stDownloadButton"] button {{
+        width: 100%;
+        max-width: 600px;
     }}
     .metric-card {{
         background: rgba(255,255,255,0.08) !important;
@@ -229,7 +248,6 @@ def apply_case(text_case, value):
 
 
 # ── PowerPoint Generation Engine ────────────────────────────────────────────
-st.markdown('<div class="generate-container">', unsafe_allow_html=True)
 if st.button("🚀 Generate & Download PPTX", key="generate"):
     if 'uploaded_files' not in st.session_state or not st.session_state.uploaded_files:
         st.error("Upload PDFs first.")
@@ -618,5 +636,3 @@ if st.button("🚀 Generate & Download PPTX", key="generate"):
                 mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 use_container_width=True
             )
-
-st.markdown('</div>', unsafe_allow_html=True)
