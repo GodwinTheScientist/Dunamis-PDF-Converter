@@ -99,7 +99,7 @@ st.markdown(f"""
 
     <div class="header-box">
         <img src="{logo_url}" class="mini-logo">
-        <h1 class="main-title">Dunamis Prayer Converter</h1>
+        <h1 class="main-title">Dunamis PDF Converter</h1>
         <p class="subtitle">PDF to PPTX Dashboard</p>
     </div>
 """, unsafe_allow_html=True)
@@ -208,7 +208,7 @@ with st.expander("🎨 2. Customize appearance (optional)", expanded=False):
         text_case = st.selectbox("Text case", ["Original", "UPPERCASE", "lowercase", "Title Case"])
 
 # ── Step 3: Generate ──────────────────────────────────────────────────────────
-st.markdown('<p class="section-heading">🚀 3. Generate your presentation</p>', unsafe_allow_html=True)
+st.markdown('<p class="section-heading"> 3. Generate your presentation</p>', unsafe_allow_html=True)
 
 
 def apply_case(text_case, value):
@@ -601,7 +601,7 @@ if st.button("Generate & Download PPTX", key="generate", use_container_width=Tru
             prs.save(bio)
             bio.seek(0)
 
-            st.success(f"✅ Generated {len(prs.slides)} slides!")
+            st.success(f" Generated {len(prs.slides)} slides!")
             if skipped:
                 st.warning("Skipped:\n" + "\n".join(f"- {s}" for s in skipped))
 
