@@ -398,6 +398,30 @@ if st.button("Generate & Download PPTX", key="generate", use_container_width=Tru
                     )
                     return looks_numbered and not looks_like_scripture_ref(line)
 
+                def is_point_one_start(line):
+                    looks_like_one = bool(
+                        re.match(r"^\(?1\)?[\.\s]", line) or re.match(r"^Prayer Point\s*1\b", line, re.I)
+                    )
+                    return looks_like_one and not looks_like_scripture_ref(line)
+
+                # Find where the numbered list actually begins. Anything above
+                # that - the passage-of-the-week text and the chapter/verse
+                # reference under it - is preamble, not a prayer point, and
+                # gets dropped outright regardless of what it says.
+                start_idx = None
+                for i, line in enumerate(lines):
+                    if any(m in line.lower() for m in
+                           ["charity no", "dunamis centre", "northmoor", "manchester m12", "info@", "+44", "prayer session"]):
+                        continue
+                    if re.match(r"^P\s*a\s*g\s*e\s*\d+", line, re.I) or line.strip() == "Dunamis Bible Church" or "PRAYER POINTS" in line:
+                        continue
+                    if is_point_one_start(line):
+                        start_idx = i
+                        break
+                # If no clean "point 1" marker is found, fall back to using the
+                # whole document rather than silently producing zero slides.
+                lines = lines[start_idx:] if start_idx is not None else lines
+
                 prayers = []
                 current = ""
                 for line in lines:
