@@ -392,16 +392,29 @@ if st.button("Generate & Download PPTX", key="generate", use_container_width=Tru
 
             # ── Church-template parsing (existing behaviour, bug-fixed) ─────
             def process_church_pdf(prs, lines, header_color, body_color, header_size, body_size, text_case):
+                # If the document explicitly labels points as "Prayer Point N"
+                # anywhere, that's the only reliable signal - a quoted Bible
+                # passage almost always carries its own inline verse numbers
+                # (1, 2, 3...) which are indistinguishable from bare "1."/"2."
+                # numbering and would otherwise get mistaken for the list.
+                uses_explicit_label = any(re.match(r"^Prayer Point\s*\d+", l, re.I) for l in lines)
+
                 def is_prayer_start(line):
-                    looks_numbered = bool(
-                        re.match(r"^\(?\d+\)?[\.\s]", line) or re.match(r"^Prayer Point\s*\d+", line, re.I)
-                    )
+                    if uses_explicit_label:
+                        looks_numbered = bool(re.match(r"^Prayer Point\s*\d+", line, re.I))
+                    else:
+                        looks_numbered = bool(
+                            re.match(r"^\(?\d+\)?[\.\s]", line) or re.match(r"^Prayer Point\s*\d+", line, re.I)
+                        )
                     return looks_numbered and not looks_like_scripture_ref(line)
 
                 def is_point_one_start(line):
-                    looks_like_one = bool(
-                        re.match(r"^\(?1\)?[\.\s]", line) or re.match(r"^Prayer Point\s*1\b", line, re.I)
-                    )
+                    if uses_explicit_label:
+                        looks_like_one = bool(re.match(r"^Prayer Point\s*1\b", line, re.I))
+                    else:
+                        looks_like_one = bool(
+                            re.match(r"^\(?1\)?[\.\s]", line) or re.match(r"^Prayer Point\s*1\b", line, re.I)
+                        )
                     return looks_like_one and not looks_like_scripture_ref(line)
 
                 # Find where the numbered list actually begins. Anything above
