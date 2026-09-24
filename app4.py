@@ -393,9 +393,9 @@ if st.button("Generate & Download PPTX", key="generate", use_container_width=Tru
             # ── Church-template parsing (existing behaviour, bug-fixed) ─────
             def process_church_pdf(prs, lines, header_color, body_color, header_size, body_size, text_case):
                 # If the document explicitly labels points as "Prayer Point N"
-                # anywhere, that's the only reliable signal - a quoted Bible
-                # passage almost always carries its own inline verse numbers
-                # (1, 2, 3...) which are indistinguishable from bare "1."/"2."
+                # anywhere, that's a reliable signal - a quoted Bible passage
+                # almost always carries its own inline verse numbers (1, 2,
+                # 3...) which are indistinguishable from bare "1."/"2."
                 # numbering and would otherwise get mistaken for the list.
                 uses_explicit_label = any(re.match(r"^Prayer Point\s*\d+", l, re.I) for l in lines)
 
@@ -417,23 +417,38 @@ if st.button("Generate & Download PPTX", key="generate", use_container_width=Tru
                         )
                     return looks_like_one and not looks_like_scripture_ref(line)
 
-                # Find where the numbered list actually begins. Anything above
-                # that - the passage-of-the-week text and the chapter/verse
-                # reference under it - is preamble, not a prayer point, and
-                # gets dropped outright regardless of what it says.
-                start_idx = None
+                # The template's own PDFs carry a literal "PRAYER POINTS"
+                # heading marking exactly where the passage-of-the-week ends
+                # and the real numbered list begins - that's a far more
+                # reliable anchor than guessing from digit patterns, since the
+                # passage above it can contain any inline numbering at all.
+                # Use the LAST such heading, in case the passage text itself
+                # happens to mention the phrase somewhere earlier.
+                heading_idx = None
                 for i, line in enumerate(lines):
-                    if any(m in line.lower() for m in
-                           ["charity no", "dunamis centre", "northmoor", "manchester m12", "info@", "+44", "prayer session"]):
-                        continue
-                    if re.match(r"^P\s*a\s*g\s*e\s*\d+", line, re.I) or line.strip() == "Dunamis Bible Church" or "PRAYER POINTS" in line:
-                        continue
-                    if is_point_one_start(line):
-                        start_idx = i
-                        break
-                # If no clean "point 1" marker is found, fall back to using the
-                # whole document rather than silently producing zero slides.
+                    if "PRAYER POINTS" in line.upper():
+                        heading_idx = i
+
+                if heading_idx is not None:
+                    start_idx = heading_idx + 1
+                else:
+                    # No literal heading found - fall back to locating the
+                    # first genuine "point 1" marker instead.
+                    start_idx = None
+                    for i, line in enumerate(lines):
+                        if any(m in line.lower() for m in
+                               ["charity no", "dunamis centre", "northmoor", "manchester m12", "info@", "+44", "prayer session"]):
+                            continue
+                        if re.match(r"^P\s*a\s*g\s*e\s*\d+", line, re.I) or line.strip() == "Dunamis Bible Church":
+                            continue
+                        if is_point_one_start(line):
+                            start_idx = i
+                            break
+
+                # If neither signal is found, fall back to the whole document
+                # rather than silently producing zero slides.
                 lines = lines[start_idx:] if start_idx is not None else lines
+
 
                 prayers = []
                 current = ""
