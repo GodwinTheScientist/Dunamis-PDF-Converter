@@ -166,6 +166,38 @@ def extract_passage(lines):
     return reference, body_text
 
 
+VERSE_NUM_RE = re.compile(r"(?:^|[:.]\s+)(\d{1,3})(?=[\.\s])")
+
+
+def find_point_list_start(lines, uses_explicit_label):
+    """Locate where the real numbered prayer list begins, for documents with
+    no literal 'PRAYER POINTS' heading to anchor on. A quoted Bible passage's
+    own inline verse numbers (1, 2, 3...) look identical to bare prayer-point
+    numbering - but verse numbers only ever increase within a passage, so the
+    first place the numbering resets back down is the clearest sign the real
+    list has begun. Falls back to the first numbered line found if no reset
+    is ever seen, which correctly handles both 'no passage present' and 'a
+    single, unnumbered verse' - cases where the first number really is point 1."""
+    if uses_explicit_label:
+        for i, line in enumerate(lines):
+            if re.match(r"^Prayer Point\s*1\b", line, re.I) and not looks_like_scripture_ref(line):
+                return i
+        return None
+
+    last_num = 0
+    first_leading_idx = None
+    for i, line in enumerate(lines):
+        if looks_like_scripture_ref(line):
+            continue
+        if first_leading_idx is None and re.match(r"^\(?\d+\)?[\.\s]", line):
+            first_leading_idx = i
+        for n in (int(n) for n in VERSE_NUM_RE.findall(line)):
+            if last_num > 0 and n <= last_num:
+                return i
+            last_num = max(last_num, n)
+    return first_leading_idx
+
+
 def derive_title(filename, text):
     t = text.upper()
     if "FRIDAY" in t:
@@ -503,22 +535,11 @@ if st.button("Generate & Download PPTX", key="generate", use_container_width=Tru
                         )
                     return looks_numbered and not looks_like_scripture_ref(line)
 
-                def is_point_one_start(line):
-                    if uses_explicit_label:
-                        looks_like_one = bool(re.match(r"^Prayer Point\s*1\b", line, re.I))
-                    else:
-                        looks_like_one = bool(
-                            re.match(r"^\(?1\)?[\.\s]", line) or re.match(r"^Prayer Point\s*1\b", line, re.I)
-                        )
-                    return looks_like_one and not looks_like_scripture_ref(line)
-
-                # The template's own PDFs carry a literal "PRAYER POINTS"
-                # heading marking exactly where the passage-of-the-week ends
-                # and the real numbered list begins - that's a far more
-                # reliable anchor than guessing from digit patterns, since the
-                # passage above it can contain any inline numbering at all.
-                # Use the LAST such heading, in case the passage text itself
-                # happens to mention the phrase somewhere earlier.
+                # The template's own PDFs sometimes carry a literal "PRAYER
+                # POINTS" heading marking exactly where the passage-of-the-week
+                # ends and the real list begins - when present, that's the
+                # most reliable anchor. Use the LAST such heading, in case the
+                # passage text itself happens to mention the phrase.
                 heading_idx = None
                 for i, line in enumerate(lines):
                     if "PRAYER POINTS" in line.upper():
@@ -527,18 +548,10 @@ if st.button("Generate & Download PPTX", key="generate", use_container_width=Tru
                 if heading_idx is not None:
                     start_idx = heading_idx + 1
                 else:
-                    # No literal heading found - fall back to locating the
-                    # first genuine "point 1" marker instead.
-                    start_idx = None
-                    for i, line in enumerate(lines):
-                        if any(m in line.lower() for m in
-                               ["charity no", "dunamis centre", "northmoor", "manchester m12", "info@", "+44", "prayer session"]):
-                            continue
-                        if re.match(r"^P\s*a\s*g\s*e\s*\d+", line, re.I) or line.strip() == "Dunamis Bible Church":
-                            continue
-                        if is_point_one_start(line):
-                            start_idx = i
-                            break
+                    # No literal heading - fall back to detecting where the
+                    # numbering resets, since a passage's own inline verse
+                    # numbers only ever increase (see find_point_list_start).
+                    start_idx = find_point_list_start(lines, uses_explicit_label)
 
                 # If neither signal is found, treat the whole document as
                 # points (no passage to extract) rather than producing nothing.
