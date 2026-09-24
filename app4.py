@@ -477,7 +477,8 @@ if st.button("Generate & Download PPTX", key="generate", use_container_width=Tru
                     current_size -= 3
 
             # ── Bible Passage slide: title, italic reference, then body ─────
-            def add_passage_slide(slide, reference, body_text, header_size, max_b_size, header_color, body_color):
+            def add_passage_slide(slide, reference, body_text, header_size, max_b_size, header_color, body_color,
+                                   title_text="Bible Passage", min_size=28):
                 left = Inches(0.8)
                 top = Inches(0.5)
                 width = Inches(11.733)
@@ -491,24 +492,24 @@ if st.button("Generate & Download PPTX", key="generate", use_container_width=Tru
                 tf.margin_left = Inches(0)
                 tf.margin_right = Inches(0)
 
-                title_size = min(header_size, 50)
-                ref_size = max(min(int(header_size * 0.5), 30), 20)
+                title_size = min(int(header_size * 0.6), 36)
+                ref_size = max(min(int(header_size * 0.35), 24), 16)
                 current_size = max_b_size
                 char_len = len(body_text)
 
                 if char_len > 300:
-                    current_size = min(current_size, 36)
+                    current_size = min(current_size, 38)
                 elif char_len > 180:
-                    current_size = min(current_size, 44)
+                    current_size = min(current_size, 46)
 
-                while current_size >= 18:
+                while current_size >= min_size:
                     tf.clear()
 
                     p_title = tf.paragraphs[0]
                     p_title.alignment = PP_ALIGN.CENTER
-                    p_title.space_after = Pt(4)
+                    p_title.space_after = Pt(2)
                     run_title = p_title.add_run()
-                    run_title.text = "Bible Passage"
+                    run_title.text = title_text
                     run_title.font.size = Pt(title_size)
                     r, g, b = hex_to_rgb(header_color)
                     run_title.font.color.rgb = RGBColor(r, g, b)
@@ -518,14 +519,14 @@ if st.button("Generate & Download PPTX", key="generate", use_container_width=Tru
                     if reference:
                         p_ref = tf.add_paragraph()
                         p_ref.alignment = PP_ALIGN.CENTER
-                        p_ref.space_after = Pt(22)
+                        p_ref.space_after = Pt(14)
                         run_ref = p_ref.add_run()
                         run_ref.text = reference
                         run_ref.font.size = Pt(ref_size)
                         run_ref.font.color.rgb = RGBColor(r, g, b)
                         run_ref.font.italic = True
                         run_ref.font.bold = False
-                        ref_allowance = ref_size + 22
+                        ref_allowance = ref_size + 14
 
                     p_body = tf.add_paragraph()
                     p_body.alignment = PP_ALIGN.CENTER
@@ -537,13 +538,43 @@ if st.button("Generate & Download PPTX", key="generate", use_container_width=Tru
                     run_body.font.color.rgb = RGBColor(br, bg, bb)
                     run_body.font.bold = True
 
-                    title_allowance = title_size + 4 + ref_allowance
+                    title_allowance = title_size + 2 + ref_allowance
                     estimated_lines = (char_len * (current_size * 0.55)) / (11.733 * 72)
                     estimated_height = (title_allowance + (estimated_lines * current_size * 1.2)) / 72
 
                     if estimated_height <= 6.3:
                         break
                     current_size -= 4
+
+            # ── Split a passage into slide-sized pages instead of shrinking ──
+            # its font indefinitely: pack sentences onto a page as long as the
+            # page would still fit at min_size or larger; once it wouldn't,
+            # start a new page. add_passage_slide then picks the best size for
+            # each page (up to max_b_size), so short pages render large and
+            # only genuinely long passages spill onto a second slide.
+            def paginate_passage(body_text, header_size, max_b_size, has_reference, min_size=28):
+                title_size = min(int(header_size * 0.6), 36)
+                ref_size = max(min(int(header_size * 0.35), 24), 16)
+                ref_allowance = (ref_size + 14) if has_reference else 0
+                title_allowance = title_size + 2 + ref_allowance
+
+                def fits_at_min(char_len):
+                    estimated_lines = (char_len * (min_size * 0.55)) / (11.733 * 72)
+                    estimated_height = (title_allowance + estimated_lines * min_size * 1.2) / 72
+                    return estimated_height <= 6.3
+
+                sentences = re.split(r"(?<=[.!?])\s+", body_text)
+                pages, current = [], ""
+                for sentence in sentences:
+                    candidate = (current + " " + sentence).strip() if current else sentence
+                    if current and not fits_at_min(len(candidate)):
+                        pages.append(current.strip())
+                        current = sentence
+                    else:
+                        current = candidate
+                if current:
+                    pages.append(current.strip())
+                return pages if pages else [body_text]
 
             # ── Church-template parsing (existing behaviour, bug-fixed) ─────
             def process_church_pdf(prs, lines, header_color, body_color, header_size, body_size, text_case):
@@ -592,9 +623,13 @@ if st.button("Generate & Download PPTX", key="generate", use_container_width=Tru
                 if passage_body:
                     ref_display = apply_case(text_case, reference) if reference else None
                     body_display = apply_case(text_case, passage_body)
-                    slide = prs.slides.add_slide(prs.slide_layouts[6])
-                    set_bg(slide)
-                    add_passage_slide(slide, ref_display, body_display, header_size, body_size, header_color, body_color)
+                    passage_pages = paginate_passage(body_display, header_size, body_size, bool(ref_display))
+                    for page_idx, page_text in enumerate(passage_pages):
+                        slide = prs.slides.add_slide(prs.slide_layouts[6])
+                        set_bg(slide)
+                        page_title = "Bible Passage" if page_idx == 0 else "Bible Passage (cont'd)"
+                        add_passage_slide(slide, ref_display, page_text, header_size, body_size, header_color, body_color,
+                                           title_text=page_title)
 
                 # ── "Prayer Points" section divider ─────────────────────────
                 slide = prs.slides.add_slide(prs.slide_layouts[6])
