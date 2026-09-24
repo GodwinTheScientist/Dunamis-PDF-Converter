@@ -7,6 +7,7 @@ import fitz  # PyMuPDF
 import re
 from io import BytesIO
 from collections import Counter
+import zipfile
 
 logo_url = "https://i.postimg.cc/sxSLVk2D/church-logo-cmyk-1-white.png"
 bg_image_url = "https://images.unsplash.com/photo-1530688957198-8570b1819eeb?q=80&w=2114&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
@@ -99,7 +100,7 @@ st.markdown(f"""
 
     <div class="header-box">
         <img src="{logo_url}" class="mini-logo">
-        <h1 class="main-title">Dunamis PDF Converter</h1>
+        <h1 class="main-title">Dunamis Prayer Converter</h1>
         <p class="subtitle">PDF to PPTX Dashboard</p>
     </div>
 """, unsafe_allow_html=True)
@@ -115,6 +116,28 @@ def is_church_template(text):
     document that contains a date, verse reference, or numbered list)."""
     t = text.lower()
     return t.count("prayer point") >= 2 or "dunamis bible church" in t
+
+
+SCRIPTURE_REF_RE = re.compile(
+    r"^\(?(?:[1-3]\s)?[A-Za-z]+(?:\s[A-Za-z]+){0,2}\.?\s+\d{1,3}:\d{1,3}(?:-\d{1,3})?\)?\.?"
+    r"\s*(?:\([A-Za-z]{2,6}\))?$"
+)
+
+
+def looks_like_scripture_ref(line):
+    """True for standalone Bible-reference lines like '2 Corinthians 5:17' or
+    'John 3:16 (NIV)' - these share a 'digit + space + word' shape with the
+    template's own '1 Give thanks for...' numbering, but a scripture reference
+    is short and centers on a chapter:verse pattern, which a real prayer line
+    never has. Used to stop such lines from being misread as a new prayer
+    point boundary."""
+    line = line.strip()
+    return len(line) <= 60 and bool(SCRIPTURE_REF_RE.match(line))
+
+
+def safe_filename(name):
+    name = re.sub(r"[^\w\-]+", "_", name).strip("_")
+    return name or "presentation"
 
 
 def derive_title(filename, text):
@@ -133,7 +156,7 @@ if 'total_sessions_count' not in st.session_state:
     st.session_state.total_sessions_count = "-"
 
 # ── Step 1: Upload ────────────────────────────────────────────────────────────
-st.markdown('<p class="section-heading"> 1. Upload your PDFs</p>', unsafe_allow_html=True)
+st.markdown('<p class="section-heading">📁 1. Upload your PDFs</p>', unsafe_allow_html=True)
 with st.container(border=True):
     doc_type_choice = st.selectbox(
         "Document type",
@@ -185,7 +208,7 @@ if st.session_state.get('uploaded_files'):
     )
 
 # ── Step 2: Customize (optional, collapsed by default) ───────────────────────
-with st.expander(" 2. Customize appearance (optional)", expanded=False):
+with st.expander("🎨 2. Customize appearance (optional)", expanded=False):
     col_left, col_right = st.columns([1, 1])
     with col_left:
         bg_option = st.radio("Background", ["Dark Navy", "Black", "Deep Purple", "Custom"])
@@ -208,7 +231,7 @@ with st.expander(" 2. Customize appearance (optional)", expanded=False):
         text_case = st.selectbox("Text case", ["Original", "UPPERCASE", "lowercase", "Title Case"])
 
 # ── Step 3: Generate ──────────────────────────────────────────────────────────
-st.markdown('<p class="section-heading"> 3. Generate your presentation</p>', unsafe_allow_html=True)
+st.markdown('<p class="section-heading">🚀 3. Generate your presentation</p>', unsafe_allow_html=True)
 
 
 def apply_case(text_case, value):
@@ -229,10 +252,6 @@ if st.button("Generate & Download PPTX", key="generate", use_container_width=Tru
         st.error("Upload PDFs first.")
     else:
         with st.spinner("Processing Presentation Slides..."):
-            prs = Presentation()
-            prs.slide_width = Inches(13.333)
-            prs.slide_height = Inches(7.5)
-
             def set_bg(slide):
                 fill = slide.background.fill
                 fill.solid()
@@ -372,10 +391,12 @@ if st.button("Generate & Download PPTX", key="generate", use_container_width=Tru
                     current_size -= 3
 
             # ── Church-template parsing (existing behaviour, bug-fixed) ─────
-            def process_church_pdf(lines, header_color, body_color, header_size, body_size, text_case):
-                is_prayer_start = lambda line: bool(
-                    re.match(r"^\(?\d+\)?[\.\s]", line) or re.match(r"^Prayer Point\s*\d+", line, re.I)
-                )
+            def process_church_pdf(prs, lines, header_color, body_color, header_size, body_size, text_case):
+                def is_prayer_start(line):
+                    looks_numbered = bool(
+                        re.match(r"^\(?\d+\)?[\.\s]", line) or re.match(r"^Prayer Point\s*\d+", line, re.I)
+                    )
+                    return looks_numbered and not looks_like_scripture_ref(line)
 
                 prayers = []
                 current = ""
@@ -531,7 +552,7 @@ if st.button("Generate & Download PPTX", key="generate", use_container_width=Tru
                         slides.append({"title": title, "type": "paragraph", "content": chunk})
                 return slides
 
-            def process_general_pdf(doc, header_color, body_color, header_size, body_size, text_case):
+            def process_general_pdf(prs, doc, header_color, body_color, header_size, body_size, text_case):
                 sections = extract_sections(doc)
                 if not sections:
                     full_text = "".join(p.get_text("text") for p in doc)
@@ -553,9 +574,12 @@ if st.button("Generate & Download PPTX", key="generate", use_container_width=Tru
                                 continue
                             add_fluid_text_slide(slide, title, body_text, body_size, header_size, header_color, body_color)
 
-            # ── Main per-file loop ────────────────────────────────────────────
+            # ── Main per-file loop - one separate deck per PDF ────────────────
             skipped = []
-            for idx, file in enumerate(st.session_state.uploaded_files):
+            generated_decks = []  # (title, out_filename, pptx_bytes, slide_count)
+            used_names = set()
+
+            for file in st.session_state.uploaded_files:
                 try:
                     doc = fitz.open(stream=file.getvalue(), filetype="pdf")
                     text = "".join(page.get_text("text") for page in doc)
@@ -573,11 +597,9 @@ if st.button("Generate & Download PPTX", key="generate", use_container_width=Tru
 
                     title = derive_title(file.name, text)
 
-                    if idx > 0:
-                        slide = prs.slides.add_slide(prs.slide_layouts[6])
-                        set_bg(slide)
-                        divider_label = "Next Session" if file_mode == "church" else "Next Document"
-                        add_cover_centered(slide, 0.8, 2.8, 11.7, 2.0, f"--- {divider_label} ---\n{title}", 56, header_color, True)
+                    prs = Presentation()
+                    prs.slide_width = Inches(13.333)
+                    prs.slide_height = Inches(7.5)
 
                     slide = prs.slides.add_slide(prs.slide_layouts[6])
                     set_bg(slide)
@@ -589,26 +611,72 @@ if st.button("Generate & Download PPTX", key="generate", use_container_width=Tru
 
                     if file_mode == "church":
                         lines = [l.strip() for l in text.split("\n") if l.strip()]
-                        process_church_pdf(lines, header_color, body_color, header_size, body_size, text_case)
+                        process_church_pdf(prs, lines, header_color, body_color, header_size, body_size, text_case)
                     else:
-                        process_general_pdf(doc, header_color, body_color, header_size, body_size, text_case)
+                        process_general_pdf(prs, doc, header_color, body_color, header_size, body_size, text_case)
+
+                    if len(prs.slides) <= 1:
+                        skipped.append(f"{file.name} (no content could be extracted into slides)")
+                        continue
+
+                    deck_bytes = BytesIO()
+                    prs.save(deck_bytes)
+                    deck_bytes.seek(0)
+
+                    base_name = safe_filename(title)
+                    out_name = f"{base_name}.pptx"
+                    n = 2
+                    while out_name in used_names:
+                        out_name = f"{base_name}_{n}.pptx"
+                        n += 1
+                    used_names.add(out_name)
+
+                    generated_decks.append((title, out_name, deck_bytes.getvalue(), len(prs.slides)))
 
                 except Exception as e:
                     skipped.append(f"{file.name} (error: {e})")
                     continue
 
-            bio = BytesIO()
-            prs.save(bio)
-            bio.seek(0)
+            if not generated_decks:
+                st.error("No slides could be generated from the uploaded file(s).")
+            elif len(generated_decks) == 1:
+                title, out_name, data, slide_count = generated_decks[0]
+                st.success(f"✅ Generated {slide_count} slides!")
+                st.download_button(
+                    label="⬇ Download PPTX",
+                    data=data,
+                    file_name=out_name,
+                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    use_container_width=True
+                )
+            else:
+                total_slides = sum(d[3] for d in generated_decks)
+                st.success(f"✅ Generated {len(generated_decks)} separate presentations ({total_slides} slides total)!")
 
-            st.success(f" Generated {len(prs.slides)} slides!")
+                zip_buffer = BytesIO()
+                with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+                    for _, out_name, data, _ in generated_decks:
+                        zf.writestr(out_name, data)
+                zip_buffer.seek(0)
+
+                st.download_button(
+                    label="⬇ Download all as ZIP",
+                    data=zip_buffer,
+                    file_name="Dunamis_Prayer_Points_Batch.zip",
+                    mime="application/zip",
+                    use_container_width=True
+                )
+
+                with st.expander("Or download each presentation separately"):
+                    for title, out_name, data, slide_count in generated_decks:
+                        st.download_button(
+                            label=f"⬇ {title} ({slide_count} slides)",
+                            data=data,
+                            file_name=out_name,
+                            mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                            key=f"dl_{out_name}",
+                            use_container_width=True
+                        )
+
             if skipped:
                 st.warning("Skipped:\n" + "\n".join(f"- {s}" for s in skipped))
-
-            st.download_button(
-                label="⬇ Download PPTX",
-                data=bio,
-                file_name="Dunamis_Prayer_Points.pptx",
-                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                use_container_width=True
-            )
