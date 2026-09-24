@@ -140,6 +140,32 @@ def safe_filename(name):
     return name or "presentation"
 
 
+def extract_passage(lines):
+    """Pull a reference (e.g. '2 Thessalonians 2:3') and the passage body text
+    out of the preamble lines that sit above a template's 'PRAYER POINTS'
+    heading. The reference is usually its own short line; everything else
+    that isn't known noise is treated as the passage body."""
+    reference = None
+    body_lines = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if any(m in stripped.lower() for m in
+               ["charity no", "dunamis centre", "northmoor", "manchester m12", "info@", "+44", "prayer session"]):
+            continue
+        if re.match(r"^P\s*a\s*g\s*e\s*\d+", stripped, re.I) or stripped == "Dunamis Bible Church":
+            continue
+        if any(x in stripped for x in ["IJN=", "ITNJ=", "ITMNJ=", "ITNJCN="]):
+            continue
+        if looks_like_scripture_ref(stripped):
+            reference = stripped
+            continue
+        body_lines.append(stripped)
+    body_text = " ".join(body_lines).strip()
+    return reference, body_text
+
+
 def derive_title(filename, text):
     t = text.upper()
     if "FRIDAY" in t:
@@ -390,6 +416,75 @@ if st.button("Generate & Download PPTX", key="generate", use_container_width=Tru
                         break
                     current_size -= 3
 
+            # ── Bible Passage slide: title, italic reference, then body ─────
+            def add_passage_slide(slide, reference, body_text, header_size, max_b_size, header_color, body_color):
+                left = Inches(0.8)
+                top = Inches(0.5)
+                width = Inches(11.733)
+                height = Inches(6.5)
+
+                tb = slide.shapes.add_textbox(left, top, width, height)
+                tf = tb.text_frame
+                tf.word_wrap = True
+                tf.margin_top = Inches(0)
+                tf.margin_bottom = Inches(0)
+                tf.margin_left = Inches(0)
+                tf.margin_right = Inches(0)
+
+                title_size = min(header_size, 50)
+                ref_size = max(min(int(header_size * 0.5), 30), 20)
+                current_size = max_b_size
+                char_len = len(body_text)
+
+                if char_len > 300:
+                    current_size = min(current_size, 36)
+                elif char_len > 180:
+                    current_size = min(current_size, 44)
+
+                while current_size >= 18:
+                    tf.clear()
+
+                    p_title = tf.paragraphs[0]
+                    p_title.alignment = PP_ALIGN.CENTER
+                    p_title.space_after = Pt(4)
+                    run_title = p_title.add_run()
+                    run_title.text = "Bible Passage"
+                    run_title.font.size = Pt(title_size)
+                    r, g, b = hex_to_rgb(header_color)
+                    run_title.font.color.rgb = RGBColor(r, g, b)
+                    run_title.font.bold = True
+
+                    ref_allowance = 0
+                    if reference:
+                        p_ref = tf.add_paragraph()
+                        p_ref.alignment = PP_ALIGN.CENTER
+                        p_ref.space_after = Pt(22)
+                        run_ref = p_ref.add_run()
+                        run_ref.text = reference
+                        run_ref.font.size = Pt(ref_size)
+                        run_ref.font.color.rgb = RGBColor(r, g, b)
+                        run_ref.font.italic = True
+                        run_ref.font.bold = False
+                        ref_allowance = ref_size + 22
+
+                    p_body = tf.add_paragraph()
+                    p_body.alignment = PP_ALIGN.CENTER
+                    p_body.line_spacing = 1.15
+                    run_body = p_body.add_run()
+                    run_body.text = body_text
+                    run_body.font.size = Pt(current_size)
+                    br, bg, bb = hex_to_rgb(body_color)
+                    run_body.font.color.rgb = RGBColor(br, bg, bb)
+                    run_body.font.bold = True
+
+                    title_allowance = title_size + 4 + ref_allowance
+                    estimated_lines = (char_len * (current_size * 0.55)) / (11.733 * 72)
+                    estimated_height = (title_allowance + (estimated_lines * current_size * 1.2)) / 72
+
+                    if estimated_height <= 6.3:
+                        break
+                    current_size -= 4
+
             # ── Church-template parsing (existing behaviour, bug-fixed) ─────
             def process_church_pdf(prs, lines, header_color, body_color, header_size, body_size, text_case):
                 # If the document explicitly labels points as "Prayer Point N"
@@ -445,14 +540,29 @@ if st.button("Generate & Download PPTX", key="generate", use_container_width=Tru
                             start_idx = i
                             break
 
-                # If neither signal is found, fall back to the whole document
-                # rather than silently producing zero slides.
-                lines = lines[start_idx:] if start_idx is not None else lines
+                # If neither signal is found, treat the whole document as
+                # points (no passage to extract) rather than producing nothing.
+                preamble_end = heading_idx if heading_idx is not None else start_idx
+                preamble_lines = lines[:preamble_end] if preamble_end is not None else []
+                point_lines = lines[start_idx:] if start_idx is not None else lines
 
+                # ── Bible Passage slide, built from what used to be discarded ──
+                reference, passage_body = extract_passage(preamble_lines)
+                if passage_body:
+                    ref_display = apply_case(text_case, reference) if reference else None
+                    body_display = apply_case(text_case, passage_body)
+                    slide = prs.slides.add_slide(prs.slide_layouts[6])
+                    set_bg(slide)
+                    add_passage_slide(slide, ref_display, body_display, header_size, body_size, header_color, body_color)
+
+                # ── "Prayer Points" section divider ─────────────────────────
+                slide = prs.slides.add_slide(prs.slide_layouts[6])
+                set_bg(slide)
+                add_cover_centered(slide, 1.2, 3.1, 11.0, 1.3, "PRAYER POINTS", 60, header_color, True)
 
                 prayers = []
                 current = ""
-                for line in lines:
+                for line in point_lines:
                     if any(m in line.lower() for m in
                            ["charity no", "dunamis centre", "northmoor", "manchester m12", "info@", "+44", "prayer session"]):
                         continue
@@ -658,8 +768,7 @@ if st.button("Generate & Download PPTX", key="generate", use_container_width=Tru
                     slide = prs.slides.add_slide(prs.slide_layouts[6])
                     set_bg(slide)
                     if file_mode == "church":
-                        add_cover_centered(slide, 0.8, 1.2, 11.7, 1.8, "Dunamis Bible Church", 56, header_color, True)
-                        add_cover_centered(slide, 1.2, 4.8, 11.0, 1.2, "PRAYER POINTS", 50, "#CCCCCC")
+                        add_cover_centered(slide, 0.8, 2.8, 11.7, 2.0, "Dunamis Bible Church", 56, header_color, True)
                     else:
                         add_cover_centered(slide, 0.8, 2.8, 11.7, 2.0, title, 56, header_color, True)
 
