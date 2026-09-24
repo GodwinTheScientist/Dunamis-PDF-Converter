@@ -140,6 +140,41 @@ def safe_filename(name):
     return name or "presentation"
 
 
+CHURCH_NOISE_SUBSTRINGS = [
+    "charity no", "dunamis centre", "northmoor", "manchester m12",
+    "info@", "+44", "prayer session", "(aka",
+]
+
+# Catches header lines like "Friday 18th September 2026" wherever they sit in
+# a line (e.g. "(AKA Dunamis Ministries) SOS Friday 18th September 2026") -
+# matched generally on the day-of-week + ordinal date + month + year shape, so
+# next week's date is caught automatically without hardcoding this one.
+DAY_DATE_RE = re.compile(
+    r"\b(?:Mon|Tue(?:s)?|Wed(?:nes)?|Thu(?:rs)?|Fri|Sat|Sun)(?:day)?\s+\d{1,2}(?:st|nd|rd|th)?\s+"
+    r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep(?:t)?|Oct|Nov|Dec)\w*\s+\d{4}\b",
+    re.I,
+)
+
+
+def is_church_noise_line(line):
+    """True for church letterhead/boilerplate lines - address, charity number,
+    contact details, session-date stamps, alias tags - that should never end
+    up on a slide, in either the passage or the prayer points."""
+    stripped = line.strip()
+    if not stripped:
+        return True
+    lower = stripped.lower()
+    if any(m in lower for m in CHURCH_NOISE_SUBSTRINGS):
+        return True
+    if re.match(r"^P\s*a\s*g\s*e\s*\d+", stripped, re.I) or stripped == "Dunamis Bible Church":
+        return True
+    if any(x in stripped for x in ["IJN=", "ITNJ=", "ITMNJ=", "ITNJCN="]):
+        return True
+    if DAY_DATE_RE.search(stripped):
+        return True
+    return False
+
+
 def extract_passage(lines):
     """Pull a reference (e.g. '2 Thessalonians 2:3') and the passage body text
     out of the preamble lines that sit above a template's 'PRAYER POINTS'
@@ -149,14 +184,7 @@ def extract_passage(lines):
     body_lines = []
     for line in lines:
         stripped = line.strip()
-        if not stripped:
-            continue
-        if any(m in stripped.lower() for m in
-               ["charity no", "dunamis centre", "northmoor", "manchester m12", "info@", "+44", "prayer session"]):
-            continue
-        if re.match(r"^P\s*a\s*g\s*e\s*\d+", stripped, re.I) or stripped == "Dunamis Bible Church":
-            continue
-        if any(x in stripped for x in ["IJN=", "ITNJ=", "ITMNJ=", "ITNJCN="]):
+        if is_church_noise_line(stripped):
             continue
         if looks_like_scripture_ref(stripped):
             reference = stripped
@@ -576,12 +604,9 @@ if st.button("Generate & Download PPTX", key="generate", use_container_width=Tru
                 prayers = []
                 current = ""
                 for line in point_lines:
-                    if any(m in line.lower() for m in
-                           ["charity no", "dunamis centre", "northmoor", "manchester m12", "info@", "+44", "prayer session"]):
+                    if is_church_noise_line(line) or "PRAYER POINTS" in line.upper():
                         continue
-                    if re.match(r"^P\s*a\s*g\s*e\s*\d+", line, re.I) or line.strip() == "Dunamis Bible Church" or "PRAYER POINTS" in line:
-                        continue
-                    if any(x in line for x in ["IJN=", "ITNJ=", "ITMNJ=", "ITNJCN=", "(KJV)"]):
+                    if any(x in line for x in ["(KJV)"]):
                         continue
                     if looks_like_scripture_ref(line):
                         continue
