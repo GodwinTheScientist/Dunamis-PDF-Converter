@@ -408,6 +408,8 @@ if st.button("Generate & Download PPTX", key="generate", use_container_width=Tru
                         continue
                     if any(x in line for x in ["IJN=", "ITNJ=", "ITMNJ=", "ITNJCN=", "(KJV)"]):
                         continue
+                    if looks_like_scripture_ref(line):
+                        continue
                     if not current and not is_prayer_start(line):
                         continue
 
