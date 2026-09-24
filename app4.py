@@ -497,11 +497,6 @@ if st.button("Generate & Download PPTX", key="generate", use_container_width=Tru
                 # points rather than producing nothing.
                 point_lines = lines[start_idx:] if start_idx is not None else lines
 
-                # ── "Prayer Points" section divider ─────────────────────────
-                slide = prs.slides.add_slide(prs.slide_layouts[6])
-                set_bg(slide)
-                add_cover_centered(slide, 1.2, 3.1, 11.0, 1.3, "PRAYER POINTS", 60, header_color, True)
-
                 prayers = []
                 current = ""
                 for line in point_lines:
@@ -707,7 +702,8 @@ if st.button("Generate & Download PPTX", key="generate", use_container_width=Tru
                     slide = prs.slides.add_slide(prs.slide_layouts[6])
                     set_bg(slide)
                     if file_mode == "church":
-                        add_cover_centered(slide, 0.8, 2.8, 11.7, 2.0, "Dunamis Bible Church", 56, header_color, True)
+                        add_cover_centered(slide, 0.8, 2.4, 11.7, 1.6, "Dunamis Bible Church", 56, header_color, True)
+                        add_cover_centered(slide, 0.8, 4.0, 11.7, 1.0, "PRAYER POINTS", 28, header_color, False)
                     else:
                         add_cover_centered(slide, 0.8, 2.8, 11.7, 2.0, title, 56, header_color, True)
 
